@@ -1,5 +1,7 @@
 import express from "express";
 import dotenv from "dotenv";
+import fs from "fs";
+import path from "path";
 
 dotenv.config();
 
@@ -711,6 +713,143 @@ async function parseM3uUrl(url: string) {
   }
 }
 
+// Support endpoints and helpers for Custom M3U Playlists
+async function fetchCustomPlaylistsChannels(): Promise<any[]> {
+  const filePath = path.join(process.cwd(), "api", "custom_playlists.json");
+  let playlists: any[] = [];
+  try {
+    if (fs.existsSync(filePath)) {
+      const content = fs.readFileSync(filePath, "utf-8");
+      playlists = JSON.parse(content);
+    }
+  } catch (err) {
+    console.error("Error reading custom_playlists.json", err);
+  }
+
+  const customChannels: any[] = [];
+  
+  const fetchPromises = playlists
+    .filter(p => p.enabled !== false && p.url)
+    .map(async (playlist) => {
+      try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 6000); // 6 seconds timeout
+        const res = await fetch(playlist.url, {
+          signal: controller.signal,
+          headers: {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+          }
+        });
+        clearTimeout(timeoutId);
+        if (!res.ok) {
+          console.warn(`[Custom Playlist] Failed to fetch: ${res.status} for ${playlist.name}`);
+          return;
+        }
+        const text = await res.text();
+        const parsed = parseM3uTextToChannels(text, playlist.name, playlist.logo || "");
+        
+        parsed.forEach(ch => {
+          ch.groupTitle = playlist.name || ch.groupTitle || "Custom Streams";
+          if (playlist.logo && !ch.logoUrl) {
+            ch.logoUrl = playlist.logo;
+          }
+          customChannels.push(ch);
+        });
+      } catch (err) {
+        console.error(`[Custom Playlist] Error downloading ${playlist.name}:`, err);
+      }
+    });
+
+  await Promise.all(fetchPromises);
+  return customChannels;
+}
+
+async function buildCustomPlaylistsM3u(outputFormat: string): Promise<string> {
+  const filePath = path.join(process.cwd(), "api", "custom_playlists.json");
+  let playlists: any[] = [];
+  try {
+    if (fs.existsSync(filePath)) {
+      const content = fs.readFileSync(filePath, "utf-8");
+      playlists = JSON.parse(content);
+    }
+  } catch (err) {
+    console.error("Error reading custom_playlists.json", err);
+  }
+
+  let m3uAccumulator = "";
+
+  const fetchPromises = playlists
+    .filter(p => p.enabled !== false && p.url)
+    .map(async (playlist) => {
+      try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 6000);
+        const res = await fetch(playlist.url, {
+          signal: controller.signal,
+          headers: {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+          }
+        });
+        clearTimeout(timeoutId);
+        if (!res.ok) {
+          console.warn(`[Custom M3U] Failed to fetch: ${res.status}`);
+          return;
+        }
+        const text = await res.text();
+        const parsedChannels = parseM3uTextToChannels(text, playlist.name, playlist.logo || "");
+
+        let playlistM3u = "";
+        for (const channel of parsedChannels) {
+          const { contentId, name, mpd, cookie } = channel;
+          const chUA = channel.userAgent || "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36";
+          const groupTitle = playlist.name || channel.groupTitle || "Custom Streams";
+          const chLogo = channel.logoUrl || playlist.logo || "https://ik.imagekit.io/yjtx9nh9y/Black%20White%20Minimal%20Simple%20Modern%20Pixel%20Neon%2520%2520Modern%2520AI%2520Logo.png?updatedAt=1780156943081";
+          const groupLogoUrl = playlist.logo || "https://ik.imagekit.io/yjtx9nh9y/Black%20White%20Minimal%20Simple%20Modern%20Pixel%20Neon%2520%2520Modern%2520AI%2520Logo.png?updatedAt=1780156943081";
+
+          let kodiPropsBlock = "";
+          if (channel.kodiprops && channel.kodiprops.length > 0) {
+            for (const prop of channel.kodiprops) {
+              kodiPropsBlock += `${prop}\n`;
+            }
+          }
+          let extraOptsBlock = "";
+          if (channel.extraOpts && channel.extraOpts.length > 0) {
+            for (const opt of channel.extraOpts) {
+              extraOptsBlock += `${opt}\n`;
+            }
+          }
+
+          if (outputFormat === "tivimate") {
+            playlistM3u += `#EXTINF:-1 tvg-id="${contentId}" tvg-name="${name}" tvg-logo="${chLogo}" group-title="${groupTitle}" group-logo="${groupLogoUrl}", ${name}\n`;
+            if (kodiPropsBlock) playlistM3u += kodiPropsBlock;
+            if (extraOptsBlock) playlistM3u += extraOptsBlock;
+            playlistM3u += `#EXTVLCOPT:http-user-agent=${chUA}\n`;
+            if (cookie) playlistM3u += `#EXTVLCOPT:http-cookie=${cookie}\n`;
+            playlistM3u += `${mpd}|User-Agent=${encodeURIComponent(chUA)}${cookie ? '&Cookie=' + encodeURIComponent(cookie) : ''}\n\n`;
+          } else if (outputFormat === "standard-opt") {
+            playlistM3u += `#EXTINF:-1 tvg-id="${contentId}" tvg-name="${name}" tvg-logo="${chLogo}" group-title="${groupTitle}" group-logo="${groupLogoUrl}", ${name}\n`;
+            if (kodiPropsBlock) playlistM3u += kodiPropsBlock;
+            if (extraOptsBlock) playlistM3u += extraOptsBlock;
+            playlistM3u += `#EXTVLCOPT:http-user-agent=${chUA}\n`;
+            if (cookie) playlistM3u += `#EXTVLCOPT:http-cookie=${cookie}\n`;
+            playlistM3u += `${mpd}\n\n`;
+          } else {
+            playlistM3u += `#EXTINF:-1 tvg-id="${contentId}" tvg-name="${name}" tvg-logo="${chLogo}" group-title="${groupTitle}" group-logo="${groupLogoUrl}", ${name}\n`;
+            if (kodiPropsBlock) playlistM3u += kodiPropsBlock;
+            if (extraOptsBlock) playlistM3u += extraOptsBlock;
+            playlistM3u += `${mpd}${channel.userAgent ? '|User-Agent=' + encodeURIComponent(channel.userAgent) : ''}${cookie ? '&Cookie=' + encodeURIComponent(cookie) : ''}\n\n`;
+          }
+        }
+        m3uAccumulator += playlistM3u;
+      } catch (err) {
+        console.error(`Error processing custom M3U playlist ${playlist.name}:`, err);
+      }
+    });
+
+  await Promise.all(fetchPromises);
+  return m3uAccumulator;
+}
+
 // Core database loaders pulling from Jio & worker streams synchronously
 async function fetchJioData(force = false) {
   const now = Date.now();
@@ -836,7 +975,18 @@ async function fetchJioData(force = false) {
       };
     });
     
-    baseJioData.livechannels = [...originalJio, ...scraperCombined];
+    // Process custom channels (keep their group title as defined)
+    const customChannels = await fetchCustomPlaylistsChannels();
+    const customProcessed = customChannels.map((ch: any) => {
+      const groupName = ch.groupTitle || "Custom Playlist";
+      return {
+        ...ch,
+        groupTitle: cleanGroupTitle(groupName, false),
+        logoUrl: ch.logoUrl || "https://ik.imagekit.io/yjtx9nh9y/Black%20White%20Minimal%20Simple%20Modern%20Pixel%20Neon%2520%2520Modern%2520AI%2520Logo.png?updatedAt=1780156943081"
+      };
+    });
+    
+    baseJioData.livechannels = [...originalJio, ...scraperCombined, ...customProcessed];
     baseJioData.updatedAt = new Date().toLocaleString("en-GB", {
       day: "2-digit", month: "2-digit", year: "numeric",
       hour: "2-digit", minute: "2-digit", hour12: true
@@ -917,7 +1067,8 @@ const playlistHandler = async (req: express.Request, res: express.Response): Pro
       buildSupport()
     ]);
 
-    let combinedStreams = fancodeM3u + iccM3u + sonyM3u + crichdM3u + fifaM3u + starSportsM3u + supportM3u;
+    const customM3u = await buildCustomPlaylistsM3u(outputFormat);
+    let combinedStreams = fancodeM3u + iccM3u + sonyM3u + crichdM3u + fifaM3u + starSportsM3u + supportM3u + customM3u;
 
     if (!combinedStreams.includes("#EXTINF")) {
       const fallbackVideoUrl = "https://cartelended.vercel.app/cartelended.m3u8";
@@ -1054,6 +1205,77 @@ router.get("/playlist", handleSecurityGate, playlistHandler);
 router.get("/playlist.m3u", handleSecurityGate, playlistHandler);
 router.get("/jiotvplus.m3u", handleSecurityGate, playlistHandler);
 router.get("/play", playHandler);
+
+router.get("/custom-playlists", (req, res) => {
+  const filePath = path.join(process.cwd(), "api", "custom_playlists.json");
+  try {
+    if (fs.existsSync(filePath)) {
+      const content = fs.readFileSync(filePath, "utf-8");
+      return res.json({ success: true, playlists: JSON.parse(content) });
+    }
+    return res.json({ success: true, playlists: [] });
+  } catch (err: any) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+router.post("/custom-playlists", express.json(), (req, res) => {
+  const { id, name, url, logo, enabled } = req.body;
+  if (!name || !url) {
+    return res.status(400).json({ success: false, error: "Name and M3U URL are required" });
+  }
+
+  const filePath = path.join(process.cwd(), "api", "custom_playlists.json");
+  let playlists: any[] = [];
+  try {
+    if (fs.existsSync(filePath)) {
+      const content = fs.readFileSync(filePath, "utf-8");
+      playlists = JSON.parse(content);
+    }
+
+    if (id) {
+      const index = playlists.findIndex(p => p.id === id);
+      if (index !== -1) {
+        playlists[index] = { ...playlists[index], name, url, logo, enabled: enabled !== false };
+      } else {
+        playlists.push({ id, name, url, logo, enabled: enabled !== false });
+      }
+    } else {
+      const newId = "custom-" + Date.now();
+      playlists.push({ id: newId, name, url, logo, enabled: enabled !== false });
+    }
+
+    fs.writeFileSync(filePath, JSON.stringify(playlists, null, 2), "utf-8");
+    
+    // Clear cache to force reload next request
+    cacheData = null;
+    lastFetched = 0;
+
+    return res.json({ success: true, playlists });
+  } catch (err: any) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+router.delete("/custom-playlists/:id", (req, res) => {
+  const { id } = req.params;
+  const filePath = path.join(process.cwd(), "api", "custom_playlists.json");
+  try {
+    if (fs.existsSync(filePath)) {
+      const content = fs.readFileSync(filePath, "utf-8");
+      let playlists = JSON.parse(content);
+      playlists = playlists.filter((p: any) => p.id !== id);
+      fs.writeFileSync(filePath, JSON.stringify(playlists, null, 2), "utf-8");
+      
+      // Clear cache to force reload
+      cacheData = null;
+      lastFetched = 0;
+    }
+    return res.json({ success: true, message: "Playlist deleted successfully" });
+  } catch (err: any) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
 
 // Channels list (for dashboard preview, does not output secret stream keys to browser unless authorized)
 router.get("/channels", async (req, res) => {
