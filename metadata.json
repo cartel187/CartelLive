@@ -1,0 +1,6 @@
+{
+  "name": "IPTV Playlist Guard",
+  "description": "Secure IPTV M3U Playlist Proxy that shields stream links, implements User-Agent validation, redirects browser requests to Telegram, and packages server-less deployment configurations for Vercel.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
