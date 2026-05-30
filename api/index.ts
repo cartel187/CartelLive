@@ -84,10 +84,10 @@ function cleanGroupTitle(group: string, isOriginalJio: boolean): string {
   let g = group.trim();
   const lower = g.toLowerCase();
   
-  if (lower.includes("fancode")) return "𝗙𝗔𝗡𝗖𝗢𝗗𝗘";
-  if (lower.includes("icc") || lower.includes("𝗶🇨🇴") || lower.includes("𝗶𝗰🇨🇵") || lower.includes("𝗶𝗰𝗰")) return "𝗜🇨🇴 𝗧𝗩";
-  if (lower.includes("sony") || lower.includes("snyliv")) return "SonyLIV";
-  if (lower.includes("crichd")) return "CricHD";
+  if (lower.includes("fancode") || lower.includes("𝗳𝗮𝗻𝗰𝗼𝗱𝗲")) return "𝗙𝗔𝗡𝗖𝗢𝗗𝗘";
+  if (lower.includes("icc") || lower.includes("𝗶🇨🇴") || lower.includes("𝗶𝗰🇨🇵") || lower.includes("𝗶𝗰𝗰") || lower.includes("𝗶𝗰𝗰 𝘁𝘃") || lower.includes("icc tv")) return "𝗜𝗖𝗖 𝗧𝗩";
+  if (lower.includes("sony") || lower.includes("snyliv") || lower.includes("sonyliv")) return "SonyLIV";
+  if (lower.includes("crichd") || lower.includes("crichd")) return "CricHD";
   if (lower.includes("fifa")) return "FIFA Plus";
   if (lower.includes("star sports")) return "Star Sports";
   if (lower.includes("support") || lower.includes("𝘀𝘂𝗽𝗽𝗼𝗿𝘁")) return "𝗦𝗨𝗣𝗣𝗢𝗥𝗧";
@@ -109,9 +109,9 @@ function cleanGroupTitle(group: string, isOriginalJio: boolean): string {
 // Resolve category logos dynamically matching user specifications
 function getGroupLogo(groupName: string): string {
   const g = groupName.toLowerCase();
-  if (g.includes("fancode")) return "https://ik.imagekit.io/yjtx9nh9y/vecteezy_fancode-app-icon-on-transparent-background_69146538.png";
-  if (g.includes("icc") || g.includes("𝗶🇨🇴") || g.includes("𝗶𝗰🇨🇵") || g.includes("𝗶𝗰𝗰")) return "https://ik.imagekit.io/yjtx9nh9y/62823e9932b32411608aa856.png";
-  if (g.includes("sony")) return "https://ik.imagekit.io/yjtx9nh9y/sony-liv-logo-hd.png";
+  if (g.includes("fancode") || g.includes("𝗳𝗮𝗻𝗰𝗼𝗱𝗲")) return "https://ik.imagekit.io/yjtx9nh9y/vecteezy_fancode-app-icon-on-transparent-background_69146538.png";
+  if (g.includes("icc") || g.includes("𝗶🇨🇴") || g.includes("𝗶𝗰🇨🇵") || g.includes("𝗶𝗰𝗰") || g.includes("𝗶𝗰𝗰 𝘁𝘃") || g.includes("icc tv")) return "https://ik.imagekit.io/yjtx9nh9y/62823e9932b32411608aa856.png";
+  if (g.includes("sony") || g.includes("sonyliv")) return "https://ik.imagekit.io/yjtx9nh9y/sony-liv-logo-hd.png";
   if (g.includes("crichd")) return "https://ik.imagekit.io/yjtx9nh9y/images%20(2).jpeg";
   if (g.includes("fifa")) return "https://ik.imagekit.io/yjtx9nh9y/images.png";
   if (g.includes("star sports")) return "https://ik.imagekit.io/yjtx9nh9y/947787.jpg";
@@ -149,7 +149,7 @@ function wrapStreamUrl(urlStr: string, host: string): string {
 }
 
 // Resilient helper to parse raw M3U streams from third party event logs
-function parseM3uTextToChannels(m3uText: string, defaultLogo = ""): any[] {
+function parseM3uTextToChannels(m3uText: string, defaultGroup: string, defaultLogo = ""): any[] {
   const lines = m3uText.split(/\r?\n/);
   const channels: any[] = [];
   let current: any = null;
@@ -158,7 +158,7 @@ function parseM3uTextToChannels(m3uText: string, defaultLogo = ""): any[] {
     const line = lines[i].trim();
     if (!line) continue;
 
-    if (line.startsWith("#EXTINF:")) {
+    if (line.startsWith("#EXTINF:") || line.startsWith("#EXTINF")) {
       if (current) {
         channels.push(current);
       }
@@ -169,7 +169,7 @@ function parseM3uTextToChannels(m3uText: string, defaultLogo = ""): any[] {
         cookie: "",
         kodiprops: [],
         logoUrl: defaultLogo,
-        groupTitle: "Entertainment",
+        groupTitle: defaultGroup,
         extraOpts: []
       };
 
@@ -183,7 +183,12 @@ function parseM3uTextToChannels(m3uText: string, defaultLogo = ""): any[] {
 
       // group-title
       const groupMatch = line.match(/group-title="([^"]*)"/);
-      if (groupMatch) current.groupTitle = groupMatch[1];
+      if (groupMatch) {
+         // Only override groupTitle if defaultGroup is empty, otherwise we hold defaultGroup brand
+         if (!defaultGroup) {
+           current.groupTitle = groupMatch[1];
+         }
+      }
 
       // name after comma
       const commaIndex = line.lastIndexOf(",");
@@ -295,7 +300,7 @@ async function buildFanCode(): Promise<string> {
 async function buildIccTv(): Promise<string> {
   const jsonUrl = "https://raw.githubusercontent.com/doctor-8trange/nexphi0/refs/heads/main/data/icc.json";
   const iccGroupLogo = "https://ik.imagekit.io/yjtx9nh9y/62823e9932b32411608aa856.png";
-  const boldCategory = "𝗜🇨🇴 𝗧𝗩";
+  const boldCategory = "𝗜𝗖𝗖 𝗧𝗩";
   let m3u = "";
 
   try {
@@ -789,23 +794,30 @@ async function fetchJioData(force = false) {
       buildSupport()
     ]);
 
-    const fcChannels = parseM3uTextToChannels(fcM3u, "https://ik.imagekit.io/yjtx9nh9y/vecteezy_fancode-app-icon-on-transparent-background_69146538.png");
-    const iccChannels = parseM3uTextToChannels(iccM3u, "https://ik.imagekit.io/yjtx9nh9y/62823e9932b32411608aa856.png");
-    const sonyChannels = parseM3uTextToChannels(sonyM3u, "https://ik.imagekit.io/yjtx9nh9y/sony-liv-logo-hd.png");
-    const cricChannels = parseM3uTextToChannels(cricM3u, "https://ik.imagekit.io/yjtx9nh9y/images%20(2).jpeg");
-    const fifaChannels = parseM3uTextToChannels(fifaM3u, "https://ik.imagekit.io/yjtx9nh9y/images.png");
-    const starSportsChannels = parseM3uTextToChannels(starM3u, "https://ik.imagekit.io/yjtx9nh9y/947787.jpg");
-    const supportChannels = parseM3uTextToChannels(supportM3u, "https://ik.imagekit.io/yjtx9nh9y/sllmnhx-telegram-6896827.svg?updatedAt=1777824421413");
+    const fcChannels = parseM3uTextToChannels(fcM3u, "𝗙𝗔𝗡𝗖𝗢𝗗𝗘", "https://ik.imagekit.io/yjtx9nh9y/vecteezy_fancode-app-icon-on-transparent-background_69146538.png");
+    const iccChannels = parseM3uTextToChannels(iccM3u, "𝗜𝗖𝗖 𝗧𝗩", "https://ik.imagekit.io/yjtx9nh9y/62823e9932b32411608aa856.png");
+    const sonyChannels = parseM3uTextToChannels(sonyM3u, "SonyLIV", "https://ik.imagekit.io/yjtx9nh9y/sony-liv-logo-hd.png");
+    const cricChannels = parseM3uTextToChannels(cricM3u, "CricHD", "https://ik.imagekit.io/yjtx9nh9y/images%20(2).jpeg");
+    const fifaChannels = parseM3uTextToChannels(fifaM3u, "FIFA Plus", "https://ik.imagekit.io/yjtx9nh9y/images.png");
+    const starSportsChannels = parseM3uTextToChannels(starM3u, "Star Sports", "https://ik.imagekit.io/yjtx9nh9y/947787.jpg");
+    const supportChannels = parseM3uTextToChannels(supportM3u, "𝗦𝗨𝗣𝗣𝗢𝗥𝗧", "https://ik.imagekit.io/yjtx9nh9y/sllmnhx-telegram-6896827.svg?updatedAt=1777824421413");
     
-    // Process original Jio channels (keep "JioS2 " prefix)
-    const originalJio = baseJioData.livechannels.map((ch: any) => {
-      const groupName = ch.groupTitle || getChannelCategory(ch.name);
-      return {
-        ...ch,
-        groupTitle: cleanGroupTitle(groupName, true),
-        logoUrl: ch.logoUrl || `https://jiotvimages.live.jio.com/jiotv_images/${ch.contentId}_logo.png`
-      };
-    });
+    // Process original Jio channels (keep "JioS2 " prefix, filter out scraper brands to avoid mixing)
+    const originalJio = baseJioData.livechannels
+      .filter((ch: any) => {
+        const nom = (ch.name || "").toLowerCase();
+        const grp = (ch.groupTitle || "").toLowerCase();
+        return !nom.includes("fancode") && !nom.includes("crichd") && !nom.includes("icc tv") && !nom.includes("sonyliv") && !nom.includes("sony liv") &&
+               !grp.includes("fancode") && !grp.includes("crichd") && !grp.includes("icc") && !grp.includes("sony");
+      })
+      .map((ch: any) => {
+        const groupName = ch.groupTitle || getChannelCategory(ch.name);
+        return {
+          ...ch,
+          groupTitle: cleanGroupTitle(groupName, true),
+          logoUrl: ch.logoUrl || `https://jiotvimages.live.jio.com/jiotv_images/${ch.contentId}_logo.png`
+        };
+      });
     
     // Process scraper channels (DO NOT keep/add "JioS2 " prefix)
     const scraperCombined = [
@@ -821,7 +833,7 @@ async function fetchJioData(force = false) {
       return {
         ...ch,
         groupTitle: cleanGroupTitle(groupName, false),
-        logoUrl: ch.logoUrl || ch.logoUrl || `https://jiotvimages.live.jio.com/jiotv_images/${ch.contentId}_logo.png`
+        logoUrl: ch.logoUrl || `https://jiotvimages.live.jio.com/jiotv_images/${ch.contentId}_logo.png`
       };
     });
     
@@ -1037,11 +1049,18 @@ const playlistHandler = async (req: express.Request, res: express.Response): Pro
     totalPayload = totalPayload.split('\n').map(line => {
       let tLine = line.trim();
       
-      // 🚨 FIX: Skip wrapper for Sony and SonyLIV links to prevent playback failure
+      // 🚨 FIX: Skip wrapper for scraper streams and system URLs to prevent playback failure
       if (tLine.startsWith("http") && 
           !tLine.includes(".mpd") && 
           !tLine.includes("sony") &&
           !tLine.includes("snyliv") &&
+          !tLine.includes("fancode") &&
+          !tLine.includes("dai-fancode") &&
+          !tLine.includes("crichd") &&
+          !tLine.includes("zohanayaan") &&
+          !tLine.includes("icc") &&
+          !tLine.includes("fifa") &&
+          !tLine.includes("star") &&
           !tLine.includes("xofix.vercel.app") && 
           !tLine.includes("xoended.vercel.app") && 
           !tLine.includes("xociety-intro.vercel.app") && 
