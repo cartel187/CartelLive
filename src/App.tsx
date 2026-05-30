@@ -22,7 +22,9 @@ import {
   Sparkles,
   Command,
   FileCode,
-  CheckCircle2
+  CheckCircle2,
+  Eye,
+  EyeOff
 } from "lucide-react";
 import { GuardConfig, ChannelItem, ServerStats, SimulationResult, CustomPlaylist } from "./types";
 
@@ -34,8 +36,8 @@ export default function App() {
     enableTokenProtection: true,
     enableUserAgentCheck: true,
     lastFetchedTime: null,
-    jioSourceUrl: "https://jiotvplus.dr-strange.workers.dev/watch/fetch.json",
-    jioM3uUrl: "https://jiotvplus.dr-strange.workers.dev/api/jiotvplus.m3u",
+    jioSourceUrl: "https://****** [Connected (Secure Feed)]",
+    jioM3uUrl: "https://****** / Protected Feed Link",
     preferredSource: "m3u"
   });
 
@@ -51,7 +53,6 @@ export default function App() {
   const [tokenInput, setTokenInput] = useState(config.secureToken);
   const [tokenProtectionToggle, setTokenProtectionToggle] = useState(config.enableTokenProtection);
   const [uaCheckToggle, setUaCheckToggle] = useState(config.enableUserAgentCheck);
-  const [m3uUrlInput, setM3uUrlInput] = useState(config.jioM3uUrl || "https://jiotvplus.dr-strange.workers.dev/api/jiotvplus.m3u");
   const [preferredSource, setPreferredSource] = useState(config.preferredSource || "m3u");
   const [savingSettings, setSavingSettings] = useState(false);
   const [settingsSuccess, setSettingsSuccess] = useState(false);
@@ -67,7 +68,7 @@ export default function App() {
   const [simulating, setSimulating] = useState(false);
 
   // UI state
-  const [activeTab, setActiveTab] = useState<"dashboard" | "channels" | "custom_m3u" | "vercel" | "simulator">("dashboard");
+  const [activeTab, setActiveTab] = useState<"dashboard" | "channels" | "custom_m3u" | "simulator">("dashboard");
   const [copiedUrl, setCopiedUrl] = useState(false);
   const [currentOrigin, setCurrentOrigin] = useState("https://your-domain.vercel.app");
 
@@ -81,6 +82,9 @@ export default function App() {
   const [editingPlaylistId, setEditingPlaylistId] = useState<string | null>(null);
   const [addingPlaylist, setAddingPlaylist] = useState(false);
   const [playlistSuccessMessage, setPlaylistSuccessMessage] = useState<string | null>(null);
+
+  // Visibility toggles for security inputs
+  const [showToken, setShowToken] = useState(false);
 
   const fetchCustomPlaylists = async () => {
     setLoadingPlaylists(true);
@@ -189,9 +193,7 @@ export default function App() {
     setNewPlaylistLogo("");
   };
 
-  // Code visualizer Tab for Vercel code exports
-  const [activeCodeFile, setActiveCodeFile] = useState<"vercel.json" | "api_playlist" | "package.json" | "readme">("api_playlist");
-  const [copiedCode, setCopiedCode] = useState(false);
+  // Code visualizer Tab details removed
 
   // Fetch current backend configuration
   const fetchConfig = async () => {
@@ -204,7 +206,6 @@ export default function App() {
         setTokenInput(data.secureToken);
         setTokenProtectionToggle(data.enableTokenProtection);
         setUaCheckToggle(data.enableUserAgentCheck);
-        if (data.jioM3uUrl) setM3uUrlInput(data.jioM3uUrl);
         if (data.preferredSource) setPreferredSource(data.preferredSource);
         setSimToken(data.secureToken);
       }
@@ -261,8 +262,7 @@ export default function App() {
           secureToken: tokenInput,
           enableTokenProtection: tokenProtectionToggle,
           enableUserAgentCheck: uaCheckToggle,
-          preferredSource: preferredSource,
-          m3uUrlInput: m3uUrlInput
+          preferredSource: preferredSource
         }),
       });
       if (response.ok) {
@@ -289,11 +289,7 @@ export default function App() {
     setTimeout(() => setCopiedUrl(false), 2000);
   };
 
-  const copyCodeToClipboard = (text: string) => {
-    navigator.clipboard.writeText(text);
-    setCopiedCode(true);
-    setTimeout(() => setCopiedCode(false), 2000);
-  };
+
 
   // Run a real-time Security check simulator
   const runSimulation = () => {
@@ -379,7 +375,7 @@ app.use(cors());
 const CONFIG = {
   telegramUrl: process.env.MY_TELEGRAM_LINK || "${telegramInput}",
   secureToken: process.env.SECURE_TOKEN || "${tokenInput}",
-  jioJsonUrl: "https://jiotvplus.dr-strange.workers.dev/watch/fetch.json",
+  jioJsonUrl: "https://****** [Connected (Secure Feed)]",
   enableTokenCheck: ${tokenProtectionToggle},
   enableUserAgentCheck: ${uaCheckToggle}
 };
@@ -555,7 +551,7 @@ Load your personalized URL in any player (TiviMate, Kodi, Apple TV, VLC):
 *Standard web browsers visited from desktop or mobiles will instantly be sent straight to your Telegram channel!*`
   };
 
-  const activeCodeContent = codeFiles[activeCodeFile];
+  const activeCodeContent = "";
 
   // Calculated categories from live channel feed dynamically
   const dynamicGroups = Array.from(new Set(channels.map((c: any) => c.groupTitle || getChannelGroup(c.name)))).filter(Boolean);
@@ -623,12 +619,6 @@ Load your personalized URL in any player (TiviMate, Kodi, Apple TV, VLC):
           >
             Security Gate Simulator
           </button>
-          <button 
-            onClick={() => setActiveTab("vercel")}
-            className={`cursor-pointer px-4 py-1.5 rounded-lg text-xs font-semibold tracking-wide transition-all ${activeTab === "vercel" ? "bg-gradient-to-r from-purple-900/80 to-indigo-900/80 text-white border border-purple-500/10" : "text-slate-400 hover:text-white"}`}
-          >
-            Vercel Exporter
-          </button>
         </nav>
         
         {/* Connection status badge */}
@@ -695,12 +685,6 @@ Load your personalized URL in any player (TiviMate, Kodi, Apple TV, VLC):
           >
             Simulator
           </button>
-          <button 
-            onClick={() => setActiveTab("vercel")}
-            className={`cursor-pointer flex-1 py-1 px-1 rounded-lg text-[10px] font-semibold tracking-wide transition-all ${activeTab === "vercel" ? "bg-gradient-to-r from-purple-900 to-indigo-900 text-white" : "text-slate-400"}`}
-          >
-            Vercel
-          </button>
         </div>
 
         {/* Dynamic Display Area based on tabs */}
@@ -741,64 +725,28 @@ Load your personalized URL in any player (TiviMate, Kodi, Apple TV, VLC):
                   {/* Secret Token Field */}
                   <div className="flex flex-col gap-2">
                     <label className="text-xs text-slate-300 font-medium">Security Access Key/Token</label>
-                    <div className="relative">
+                    <div className="relative flex items-center">
                       <input 
-                        type="text" 
+                        type={showToken ? "text" : "password"} 
                         value={tokenInput} 
                         onChange={(e) => setTokenInput(e.target.value)}
                         placeholder="e.g. cartel-vip"
                         required
-                        className="w-full bg-[#08090f] border border-slate-900 hover:border-slate-800 focus:border-purple-600 outline-none text-slate-100 rounded-xl px-4 py-3 text-xs font-semibold font-mono transition-all"
+                        className="w-full bg-[#08090f] border border-slate-900 hover:border-slate-800 focus:border-purple-600 outline-none text-slate-100 rounded-xl pl-4 pr-24 py-3 text-xs font-semibold font-mono transition-all"
                       />
-                      <span className="absolute right-4 top-3 text-[10px] text-slate-500 font-mono uppercase bg-[#111322] px-2 py-0.5 rounded border border-slate-800">TOKEN</span>
+                      <div className="absolute right-3 flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setShowToken(!showToken)}
+                          className="cursor-pointer text-slate-500 hover:text-slate-300 p-1 rounded transition-colors"
+                        >
+                          {showToken ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                        </button>
+                        <span className="text-[10px] text-slate-500 font-mono uppercase bg-[#111322] px-2 py-0.5 rounded border border-slate-800">TOKEN</span>
+                      </div>
                     </div>
                     <p className="text-[10px] text-slate-400 mt-1 leading-relaxed">
                       Restricts third parties who know your domain from downloading your playlist. Append <span className="text-purple-400 font-semibold font-mono">?token={tokenInput || "XYZ"}</span> to the IPTV subscription client.
-                    </p>
-                  </div>
-
-                  {/* Remote M3U Feed URL Field */}
-                  <div className="flex flex-col gap-2">
-                    <label className="text-xs text-slate-300 font-medium">Remote JioTV M3U Feed URL</label>
-                    <div className="relative">
-                      <input 
-                        type="url" 
-                        value={m3uUrlInput} 
-                        onChange={(e) => setM3uUrlInput(e.target.value)}
-                        placeholder="https://jiotvplus.dr-strange.workers.dev/api/jiotvplus.m3u"
-                        required
-                        className="w-full bg-[#08090f] border border-slate-900 hover:border-slate-800 focus:border-purple-600 outline-none text-slate-100 rounded-xl px-4 py-3 text-xs font-semibold font-mono transition-all"
-                      />
-                      <span className="absolute right-4 top-3 text-[10px] text-slate-500 font-mono uppercase bg-[#111322] px-2 py-0.5 rounded border border-slate-800">M3U FEED</span>
-                    </div>
-                    <p className="text-[10px] text-slate-400 mt-1 leading-relaxed">
-                      Primary remote stream playlist URL used to parse channel list, cookies and video tokens dynamically.
-                    </p>
-                  </div>
-
-                  {/* Preferred Data Source Selection */}
-                  <div className="flex flex-col gap-2">
-                    <label className="text-xs text-slate-300 font-medium">Preferred Database Source</label>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                      <button
-                        type="button"
-                        onClick={() => setPreferredSource("m3u")}
-                        className={`cursor-pointer py-2.5 px-3 rounded-xl border text-xs font-bold font-mono transition-all flex items-center justify-center gap-1.5 ${preferredSource === "m3u" ? "bg-purple-950/45 border-purple-500 text-purple-300 shadow shadow-purple-950/20" : "bg-[#08090f]/50 border-slate-900 text-slate-400 hover:border-slate-800 hover:text-slate-300"}`}
-                      >
-                        <Layers className="w-3.5 h-3.5" />
-                        <span>M3U Parse Source (Active)</span>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setPreferredSource("json")}
-                        className={`cursor-pointer py-2.5 px-3 rounded-xl border text-xs font-bold font-mono transition-all flex items-center justify-center gap-1.5 ${preferredSource === "json" ? "bg-purple-950/45 border-purple-500 text-purple-300 shadow shadow-purple-950/20" : "bg-[#08090f]/50 border-slate-900 text-slate-400 hover:border-slate-800 hover:text-slate-300"}`}
-                      >
-                        <FileCode className="w-3.5 h-3.5" />
-                        <span>JSON Fetch Source (Fallback)</span>
-                      </button>
-                    </div>
-                    <p className="text-[10px] text-slate-400 mt-1 leading-relaxed">
-                      Gateway automatically toggles source to fall back securely if any node service goes down.
                     </p>
                   </div>
 
@@ -970,7 +918,7 @@ Load your personalized URL in any player (TiviMate, Kodi, Apple TV, VLC):
                 <div className="bg-[#07090e] border border-slate-900/60 rounded-xl p-4 flex flex-col gap-1.5 font-mono text-[10px] text-slate-400">
                   <div className="flex justify-between">
                     <span>Source endpoint:</span>
-                    <span className="text-slate-300 text-right truncate max-w-[160px]">{config.jioSourceUrl}</span>
+                    <span className="text-emerald-400 text-right truncate max-w-[160px]">Connected (Secure Feed)</span>
                   </div>
                   <div className="flex justify-between">
                     <span>Target redirects:</span>
@@ -989,8 +937,8 @@ Load your personalized URL in any player (TiviMate, Kodi, Apple TV, VLC):
                     <span className="text-slate-500">Live</span>
                   </div>
                   <div className="font-mono text-[9px] text-slate-400 leading-relaxed flex flex-col gap-1">
-                    <span className="text-emerald-400">▸ [03:36:12] Ingress fetch succeeded from jiotvplus.dr-strange.workers.dev</span>
-                    <span className="text-purple-400">▸ [03:36:58] Blocked Chrome request. Spurred redirection to {telegramInput}</span>
+                    <span className="text-emerald-400">▸ [03:36:12] Synchronization succeeded from Secure database connection</span>
+                    <span className="text-purple-400">▸ [03:36:58] Redirection completed correctly to {telegramInput}</span>
                     <span className="text-indigo-400">▸ [03:37:14] VLC Client fetched playlist. 47 Channels generated dynamically.</span>
                   </div>
                 </div>
@@ -1093,7 +1041,7 @@ Load your personalized URL in any player (TiviMate, Kodi, Apple TV, VLC):
                       <th className="pb-3 pl-2">Channel</th>
                       <th className="pb-3">Content ID</th>
                       <th className="pb-3">Category</th>
-                      <th className="pb-3">DASH Stream (.mpd) origin</th>
+                      <th className="pb-3">Quality & Status</th>
                       <th className="pb-3 text-right pr-2">Header Credentials</th>
                     </tr>
                   </thead>
@@ -1123,14 +1071,16 @@ Load your personalized URL in any player (TiviMate, Kodi, Apple TV, VLC):
                             </span>
                           </td>
                           <td className="py-3">
-                            <div className="max-w-[280px] truncate font-mono text-[10px] text-slate-500 group-hover:text-slate-400 transition-colors" title={c.mpd}>
-                              {c.mpd}
+                            <div className="flex items-center gap-1.5 text-[11px] font-semibold text-emerald-400">
+                              <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                              <span>1080p HD (Secured Stream)</span>
                             </div>
                           </td>
                           <td className="py-3 text-right pr-2">
                             <button
                               onClick={() => {
-                                const formattedUAString = `${c.mpd}|User-Agent=${encodeURIComponent(config.secureToken)}&Cookie=Protected`;
+                                const secureRedirectUrl = `${currentOrigin}/play?url=${encodeURIComponent(c.mpd)}&token=${config.secureToken}`;
+                                const formattedUAString = `${secureRedirectUrl}|User-Agent=VIP-Player&Cookie=Protected`;
                                 copyToClipboard(formattedUAString);
                               }}
                               className="cursor-pointer text-[10px] bg-[#0c0d18] hover:bg-[#1a1c32] group-hover:bg-[#13162b] text-purple-400 py-1 px-2.5 rounded border border-purple-500/10 hover:border-purple-500/20 active:scale-95 transition-all text-right uppercase tracking-wide font-bold"
@@ -1319,105 +1269,7 @@ Load your personalized URL in any player (TiviMate, Kodi, Apple TV, VLC):
           </div>
         )}
 
-        {/* Vercel Deployment Tab */}
-        {activeTab === "vercel" && (
-          <div className="bg-[#0b0d18] border border-slate-900 rounded-2xl p-6 flex flex-col gap-6">
-            <div>
-              <h3 className="text-lg font-bold text-white tracking-tight">Deploy to Vercel</h3>
-              <p className="text-xs text-slate-400">Export this secure, dynamic M3U script container and deploy it serverless in 10 seconds.</p>
-            </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-              
-              {/* Deployment instructions column */}
-              <div className="lg:col-span-5 flex flex-col gap-5 bg-[#08090f] border border-slate-900 p-5 rounded-2xl">
-                <div className="text-xs font-semibold text-white tracking-wide uppercase pb-2 border-b border-slate-900 flex items-center gap-1.5">
-                  <Command className="w-4 h-4 text-purple-400" />
-                  <span>Deployment Workflow</span>
-                </div>
-
-                <ol className="text-xs text-slate-300 leading-relaxed flex flex-col gap-4 list-decimal pl-4">
-                  <li>
-                    <strong>Create Repository:</strong>
-                    <p className="text-[11px] text-slate-400 mt-1">Create a new empty directory/GitHub repository for your Vercel project.</p>
-                  </li>
-                  <li>
-                    <strong>Assemble Files:</strong>
-                    <p className="text-[11px] text-slate-400 mt-1">Add the three files shown on the right (<code>vercel.json</code>, <code>api/index.js</code>, and <code>package.json</code>) into your repository directory.</p>
-                  </li>
-                  <li>
-                    <strong>Vercel Connection:</strong>
-                    <p className="text-[11px] text-slate-400 mt-1">Navigate to your dashboard in Vercel, click **Add New**, and select **Project**. Import your repository.</p>
-                  </li>
-                  <li>
-                    <strong>Define Variables:</strong>
-                    <p className="text-[11px] text-slate-400 mt-1">Open <strong>Environment Variables</strong> inside Vercel setup and create:
-                      <ul className="list-disc pl-4 mt-2 flex flex-col gap-1">
-                        <li><code>MY_TELEGRAM_LINK</code> = <code className="text-purple-400">{telegramInput}</code></li>
-                        <li><code>SECURE_TOKEN</code> = <code className="text-purple-400">{tokenInput}</code></li>
-                      </ul>
-                    </p>
-                  </li>
-                  <li>
-                    <strong>Hit Deploy:</strong>
-                    <p className="text-[11px] text-slate-400 mt-1">Press deploy and you're good to go! Put the generated Vercel API link into TiviMate.</p>
-                  </li>
-                </ol>
-
-                <div className="bg-[#111322] border border-indigo-500/10 p-4 rounded-xl flex flex-col gap-2">
-                  <span className="text-xs font-semibold text-white">Need a quick deploy?</span>
-                  <p className="text-[10px] text-slate-400 leading-relaxed">
-                    This structure is fully prepared. You can also export this workspace directly using the export menu in AI Studio.
-                  </p>
-                </div>
-              </div>
-
-              {/* Code viewer column */}
-              <div className="lg:col-span-7 flex flex-col gap-3">
-                <div className="flex bg-[#0d0f19] border border-slate-900 rounded-xl p-1 gap-1">
-                  <button
-                    onClick={() => setActiveCodeFile("api_playlist")}
-                    className={`cursor-pointer px-3 py-1.5 rounded-lg text-[11px] font-semibold tracking-wide transition-all ${activeCodeFile === "api_playlist" ? "bg-purple-900 text-white" : "text-slate-400"}`}
-                  >
-                    api/index.js (Express Application)
-                  </button>
-                  <button
-                    onClick={() => setActiveCodeFile("vercel.json")}
-                    className={`cursor-pointer px-3 py-1.5 rounded-lg text-[11px] font-semibold tracking-wide transition-all ${activeCodeFile === "vercel.json" ? "bg-purple-900 text-white" : "text-slate-400"}`}
-                  >
-                    vercel.json
-                  </button>
-                  <button
-                    onClick={() => setActiveCodeFile("package.json")}
-                    className={`cursor-pointer px-3 py-1.5 rounded-lg text-[11px] font-semibold tracking-wide transition-all ${activeCodeFile === "package.json" ? "bg-purple-900 text-white" : "text-slate-400"}`}
-                  >
-                    package.json
-                  </button>
-                  <button
-                    onClick={() => setActiveCodeFile("readme")}
-                    className={`cursor-pointer px-3 py-1.5 rounded-lg text-[11px] font-semibold tracking-wide transition-all ${activeCodeFile === "readme" ? "bg-purple-900 text-white" : "text-slate-400"}`}
-                  >
-                    Readme.md
-                  </button>
-                </div>
-
-                <div className="bg-[#05060b] border border-slate-950 rounded-2xl p-4 min-h-[350px] relative font-mono text-[11px] select-text">
-                  <button
-                    onClick={() => copyCodeToClipboard(activeCodeContent)}
-                    className="cursor-pointer bg-slate-900 hover:bg-slate-800 text-slate-300 font-sans font-bold text-[10px] py-1.5 px-3 rounded border border-slate-800 absolute right-4 top-4 transition-all flex items-center gap-1"
-                  >
-                    {copiedCode ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
-                    <span>Copy file contents</span>
-                  </button>
-                  <pre className="overflow-x-auto h-[350px] text-slate-300 leading-relaxed pt-8">
-                    {activeCodeContent}
-                  </pre>
-                </div>
-              </div>
-
-            </div>
-          </div>
-        )}
 
         {/* Custom M3U Playlists Managing Tab */}
         {activeTab === "custom_m3u" && (
@@ -1561,7 +1413,7 @@ Load your personalized URL in any player (TiviMate, Kodi, Apple TV, VLC):
                           />
                           <div className="min-w-0 flex flex-col gap-0.5">
                             <span className="text-xs font-bold text-white truncate">{playlist.name}</span>
-                            <span className="text-[9px] text-slate-500 truncate font-mono">{playlist.url}</span>
+                            <span className="text-[9px] text-slate-500 truncate font-mono">https://****** / Protected Feed Link</span>
                             <span className="text-[9px] text-purple-400 font-mono tracking-wider font-semibold uppercase mt-0.5">M3U STREAM FEED</span>
                           </div>
                         </div>
