@@ -149,129 +149,104 @@ function wrapStreamUrl(urlStr: string, host: string): string {
 }
 
 // Resilient helper to parse raw M3U streams from third party event logs
-function parseM3uText(m3uText: string, defaultGroup: string, defaultGroupLogo: string, isStarSportsFilter = false): any[] {
+function parseM3uTextToChannels(m3uText: string, defaultLogo = ""): any[] {
   const lines = m3uText.split(/\r?\n/);
   const channels: any[] = [];
-  let currentChannel: any = null;
-  
-  for (const rawLine of lines) {
-    const line = rawLine.trim();
+  let current: any = null;
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i].trim();
     if (!line) continue;
-    
+
     if (line.startsWith("#EXTINF:")) {
-      if (currentChannel) {
-        if (!isStarSportsFilter || currentChannel.name.toLowerCase().includes("star sports")) {
-          channels.push(currentChannel);
-        }
+      if (current) {
+        channels.push(current);
       }
-      currentChannel = {
+      current = {
         contentId: "",
         name: "",
         mpd: "",
         cookie: "",
         kodiprops: [],
-        logoUrl: "",
-        groupTitle: defaultGroup,
+        logoUrl: defaultLogo,
+        groupTitle: "Entertainment",
         extraOpts: []
       };
-      
-      const idMatch = line.match(/tvg-id="([^"]+)"/);
-      if (idMatch) currentChannel.contentId = idMatch[1];
-      
-      const logoMatch = line.match(/tvg-logo="([^"]+)"/);
-      if (logoMatch) currentChannel.logoUrl = logoMatch[1];
-      
-      const nameMatch = line.match(/tvg-name="([^"]+)"/);
-      if (nameMatch) {
-        currentChannel.name = nameMatch[1];
+
+      // tvg-id
+      const idMatch = line.match(/tvg-id="([^"]*)"/);
+      if (idMatch) current.contentId = idMatch[1];
+
+      // tvg-logo
+      const logoMatch = line.match(/tvg-logo="([^"]*)"/);
+      if (logoMatch) current.logoUrl = logoMatch[1];
+
+      // group-title
+      const groupMatch = line.match(/group-title="([^"]*)"/);
+      if (groupMatch) current.groupTitle = groupMatch[1];
+
+      // name after comma
+      const commaIndex = line.lastIndexOf(",");
+      if (commaIndex !== -1) {
+        current.name = line.substring(commaIndex + 1).trim();
       } else {
-        const commaIndex = line.lastIndexOf(",");
-        if (commaIndex !== -1) {
-          currentChannel.name = line.substring(commaIndex + 1).trim();
-        }
+        const nameMatch = line.match(/tvg-name="([^"]*)"/);
+        if (nameMatch) current.name = nameMatch[1];
+      }
+      
+      if (!current.contentId && current.name) {
+        current.contentId = current.name.toLowerCase().replace(/[^a-z0-9]/g, "-");
       }
     } else if (line.startsWith("#KODIPROP:")) {
-      if (currentChannel) {
-        currentChannel.kodiprops.push(line);
+      if (current) {
+        current.kodiprops.push(line);
       }
     } else if (line.startsWith("#EXTVLCOPT:")) {
-      if (currentChannel) {
+      if (current) {
         if (line.startsWith("#EXTVLCOPT:http-user-agent=")) {
-          currentChannel.userAgent = line.replace("#EXTVLCOPT:http-user-agent=", "").trim();
+          current.userAgent = line.replace("#EXTVLCOPT:http-user-agent=", "").trim();
         } else if (line.startsWith("#EXTVLCOPT:http-cookie=")) {
-          currentChannel.cookie = line.replace("#EXTVLCOPT:http-cookie=", "").trim();
+          current.cookie = line.replace("#EXTVLCOPT:http-cookie=", "").trim();
         } else {
-          currentChannel.extraOpts.push(line);
+          current.extraOpts.push(line);
         }
       }
-    } else if (line && !line.startsWith("#")) {
-      if (currentChannel) {
+    } else if (line.startsWith("#EXTHTTP:")) {
+      if (current) {
+        current.extHttp = line;
+      }
+    } else if (!line.startsWith("#")) {
+      if (current) {
+        // Line can contain modifiers with '|'
         const parts = line.split("|");
-        let mpdUrl = parts[0].trim();
-        
+        current.mpd = parts[0].trim();
         if (parts[1]) {
           const cookieMatch = parts[1].match(/cookie=([^&]+)/i);
-          if (cookieMatch) currentChannel.cookie = decodeURIComponent(cookieMatch[1]);
-          
+          if (cookieMatch) current.cookie = decodeURIComponent(cookieMatch[1]);
           const uaMatch = parts[1].match(/user-agent=([^&]+)/i);
-          if (uaMatch) currentChannel.userAgent = decodeURIComponent(uaMatch[1]);
+          if (uaMatch) current.userAgent = decodeURIComponent(uaMatch[1]);
         }
-        
-        if (isStarSportsFilter) {
-          let urlPart = mpdUrl;
-          let modifierPart = "";
-          if (mpdUrl.includes("|")) {
-            const partsUrl = mpdUrl.split("|");
-            urlPart = partsUrl[0];
-            modifierPart = "|" + partsUrl.slice(1).join("|");
-          }
-          urlPart += urlPart.includes("?") ? "&xobypass=true" : "?xobypass=true";
-          mpdUrl = urlPart + modifierPart;
-          
-          if (!currentChannel.extraOpts.includes("#EXTVLCOPT:network-caching=3000")) {
-            currentChannel.extraOpts.push("#EXTVLCOPT:network-caching=3000");
-          }
-          if (!currentChannel.extraOpts.includes("#EXTVLCOPT:live-caching=3000")) {
-            currentChannel.extraOpts.push("#EXTVLCOPT:live-caching=3000");
-          }
-        }
-        
-        currentChannel.mpd = mpdUrl;
-        
-        if (!isStarSportsFilter || currentChannel.name.toLowerCase().includes("star sports")) {
-          channels.push(currentChannel);
-        }
-        currentChannel = null;
+        channels.push(current);
+        current = null;
       }
     }
   }
-  
-  if (currentChannel) {
-    if (!isStarSportsFilter || currentChannel.name.toLowerCase().includes("star sports")) {
-      channels.push(currentChannel);
-    }
+
+  if (current) {
+    channels.push(current);
   }
-  
-  channels.forEach(ch => {
-    ch.groupTitle = defaultGroup;
-    if (!ch.logoUrl) {
-      ch.logoUrl = defaultGroupLogo;
-    }
-    if (!ch.contentId) {
-      const sanitized = ch.name.toLowerCase().replace(/[^a-z0-9]/g, "-");
-      ch.contentId = sanitized || `channel-${Math.floor(Math.random() * 100000)}`;
-    }
-  });
-  
+
   return channels;
 }
 
-// Dynamic Fetcher: 1. FANCODE LOGIC
-async function fetchFanCode(): Promise<any[]> {
+// ==========================================
+// 1. FANCODE LOGIC
+// ==========================================
+async function buildFanCode(): Promise<string> {
   const jsonUrl = "https://raw.githubusercontent.com/doctor-8trange/zyphx8/refs/heads/main/data/fancode.json";
   const fcGroupLogo = "https://ik.imagekit.io/yjtx9nh9y/vecteezy_fancode-app-icon-on-transparent-background_69146538.png";
-  const groupTitle = "𝗙𝗔𝗡𝗖𝗢𝗗𝗘";
-  const channels: any[] = [];
+  const boldCategory = "𝗙𝗔𝗡𝗖𝗢𝗗𝗘";
+  let m3u = "";
 
   try {
     const res = await fetch(`${jsonUrl}?t=${Date.now()}`, { headers: { 'Cache-Control': 'no-cache' } });
@@ -288,246 +263,335 @@ async function fetchFanCode(): Promise<any[]> {
             let streamUrl = match.STREAMING_CDN.Primary_Playback_URL
               .replace(/in-mc-plive\.fancode\.com|in-mc-flive\.fancode\.com|bd-mc-plive\.fancode\.com|np-mc-plive\.fancode\.com|lk-mc-plive\.fancode\.com|in-mc-fblive\.fancode\.com/g, "dai-fancode.pages.dev");
 
-            const tvgId = match.match_id || `fc-${Math.floor(Math.random() * 1000000)}`;
+            const tvgId = match.match_id || "";
             const title = match.title || "FanCode Live";
-            const channelLogo = match.image || fcGroupLogo; 
+            const channelLogo = match.image || ""; 
             const lang = (match.language || "English").toLowerCase();
             const langShort = lang.substring(0, 3).toUpperCase();
-            const name = `${langShort} | ${title}`;
 
-            channels.push({
-              contentId: tvgId.toString(),
-              name,
-              mpd: streamUrl,
-              groupTitle,
-              logoUrl: channelLogo,
-              userAgent,
-              extraOpts: [`#EXTVLCOPT:http-referrer=${referer}`],
-            });
+            m3u += `#EXTINF:-1 tvg-id="${tvgId}" tvg-name="${title}" tvg-logo="${channelLogo}" group-title="${boldCategory}" group-logo="${fcGroupLogo}",${langShort} | ${title}\n`;
+            m3u += `${streamUrl}|User-Agent=${userAgent}&Referer=${referer}\n\n`;
           }
         });
       }
     }
   } catch (e) {
-    console.error("FanCode Parser Error", e);
+    console.error("FanCode Error", e);
   }
 
-  if (channels.length === 0) {
+  if (!m3u.includes("#EXTINF")) {
     const fallbackLogo = "https://ik.imagekit.io/yjtx9nh9y/IMG_20250207_083415_447.jpg";
     const fallbackVideoUrl = "https://xoended.vercel.app/xoended.m3u8";
-    channels.push({
-      contentId: "fancode-no-live",
-      name: "No Live Matches on FanCode Right Now",
-      mpd: fallbackVideoUrl,
-      groupTitle,
-      logoUrl: fallbackLogo,
-    });
+    m3u += `#EXTINF:-1 tvg-id="fancode-no-live" tvg-logo="${fallbackLogo}" group-title="${boldCategory}" group-logo="${fcGroupLogo}",No Live Matches on FanCode Right Now\n`;
+    m3u += `${fallbackVideoUrl}\n\n`;
   }
 
-  return channels;
+  return m3u;
 }
 
-// Dynamic Fetcher: 2. ICC TV LOGIC
-async function fetchIccTv(): Promise<any[]> {
+// ==========================================
+// 2. ICC TV LOGIC
+// ==========================================
+async function buildIccTv(): Promise<string> {
   const jsonUrl = "https://raw.githubusercontent.com/doctor-8trange/nexphi0/refs/heads/main/data/icc.json";
   const iccGroupLogo = "https://ik.imagekit.io/yjtx9nh9y/62823e9932b32411608aa856.png";
-  const groupTitle = "𝗜🇨🇴 𝗧𝗩";
-  const channels: any[] = [];
+  const boldCategory = "𝗜🇨🇴 𝗧𝗩";
+  let m3u = "";
 
   try {
     const res = await fetch(`${jsonUrl}?t=${Date.now()}`, { headers: { 'Cache-Control': 'no-cache' } });
-    const data = await res.json();
+    const data = await res.json() as any;
 
     if (data.live && Array.isArray(data.live)) {
       data.live.forEach((item: any) => {
         const playback = item.playback;
         if (playback && playback.playbackUrl) {
           const title = item.title || "ICC Match";
-          const tvgId = item.fields?.videoId || `icc-${Math.floor(Math.random() * 100000)}`;
+          const tvgId = item.fields?.videoId || "";
           const logo = item.thumbnail?.thumbnailUrl || iccGroupLogo;
           
           const headers = playback.headers || [];
-          const ua = headers.find((h: string) => h.toLowerCase().startsWith("user-agent"))?.split(": ")[1] || "";
-          const referer = headers.find((h: string) => h.toLowerCase().startsWith("referer"))?.split(": ")[1] || "";
-          const origin = headers.find((h: string) => h.toLowerCase().startsWith("origin"))?.split(": ")[1] || "";
+          const ua = headers.find((h: any) => h.toLowerCase().startsWith("user-agent"))?.split(": ")[1] || "";
+          const referer = headers.find((h: any) => h.toLowerCase().startsWith("referer"))?.split(": ")[1] || "";
+          const origin = headers.find((h: any) => h.toLowerCase().startsWith("origin"))?.split(": ")[1] || "";
           const licenseKey = JSON.stringify(playback.keys.jwk);
 
-          channels.push({
-            contentId: tvgId.toString(),
-            name: `English | ${title}`,
-            mpd: playback.playbackUrl,
-            groupTitle,
-            logoUrl: logo,
-            userAgent: ua,
-            kodiprops: [
-              `#KODIPROP:inputstream=inputstream.adaptive`,
-              `#KODIPROP:inputstream.adaptive.manifest_type=mpd`,
-              `#KODIPROP:inputstream.adaptive.license_type=com.clearkey.alpha`,
-              `#KODIPROP:inputstream.adaptive.license_key=${licenseKey}`
-            ],
-            extraOpts: [
-              `#EXTVLCOPT:http-referrer=${referer}`,
-              `#EXTVLCOPT:http-origin=${origin}`
-            ],
-            extHttp: `#EXTHTTP:{"referer":"${referer}","origin":"${origin}"}`
-          });
+          m3u += `#EXTINF:-1 tvg-id="${tvgId}" tvg-logo="${logo}" tvg-lang="English" group-title="${boldCategory}" group-logo="${iccGroupLogo}",English | ${title}\n`;
+          m3u += `#KODIPROP:inputstream=inputstream.adaptive\n`;
+          m3u += `#KODIPROP:inputstream.adaptive.manifest_type=mpd\n`;
+          m3u += `#KODIPROP:inputstream.adaptive.license_type=com.clearkey.alpha\n`;
+          m3u += `#KODIPROP:inputstream.adaptive.license_key=${licenseKey}\n`;
+          m3u += `#EXTVLCOPT:http-user-agent=${ua}\n`;
+          m3u += `#EXTVLCOPT:http-referrer=${referer}\n`;
+          m3u += `#EXTVLCOPT:http-origin=${origin}\n`;
+          m3u += `#EXTHTTP:{"referer":"${referer}","origin":"${origin}"}\n`;
+          m3u += `${playback.playbackUrl}\n\n`;
         }
       });
     }
   } catch (e) {
-    console.error("ICC TV Parser Error", e);
+    console.error("ICC TV Error", e);
   }
 
-  if (channels.length === 0) {
+  if (!m3u.includes("#EXTINF")) {
     const fallbackLogo = "https://ik.imagekit.io/yjtx9nh9y/IMG_20250207_083415_447.jpg";
     const fallbackVideoUrl = "https://xoended.vercel.app/xoended.m3u8";
-    channels.push({
-      contentId: "icc-no-live",
-      name: "No Live Matches on ICC TV Right Now",
-      mpd: fallbackVideoUrl,
-      groupTitle,
-      logoUrl: fallbackLogo,
-    });
+    m3u += `#EXTINF:-1 tvg-id="icc-no-live" tvg-logo="${fallbackLogo}" group-title="${boldCategory}" group-logo="${iccGroupLogo}",No Live Matches on ICC TV Right Now\n`;
+    m3u += `${fallbackVideoUrl}\n\n`;
   }
 
-  return channels;
+  return m3u;
 }
 
-// Dynamic Fetcher: 3. SONY LIV LOGIC
-async function fetchSonyLiv(): Promise<any[]> {
+// ==========================================
+// 3. SONY LIV LOGIC
+// ==========================================
+async function buildSonyLiv(): Promise<string> {
   const m3uUrl = "https://raw.githubusercontent.com/doctor-8trange/zyphora/refs/heads/main/data/sony.m3u";
   const categoryName = "SonyLIV";
   const categoryLogo = "https://ik.imagekit.io/yjtx9nh9y/sony-liv-logo-hd.png";
-  
+  let m3u = "";
+
   try {
     const res = await fetch(`${m3uUrl}?t=${Date.now()}`);
     if (res.ok) {
-      const text = await res.text();
-      const chans = parseM3uText(text, categoryName, categoryLogo);
-      if (chans.length > 0) return chans;
+      m3u = await res.text();
+      m3u = m3u.replace(/#EXTM3U.*/g, '');
+      m3u = m3u.replace(/#DATE:-.*/g, '');
+      m3u = m3u.replace(/# Written and Directed by.*/g, '');
+      m3u = m3u.replace(/# Join us on Telegram.*/g, '');
+
+      m3u = m3u.replace(/\s*group-logo="[^"]*"/g, '');
+      m3u = m3u.replace(/group-title="[^"]*"/g, `group-logo="${categoryLogo}" group-title="${categoryName}"`);
     }
   } catch (e) {
-    console.error("SonyLIV Parser Error", e);
+    console.error("SonyLIV Error", e);
   }
-  
-  return [
-    {
-      contentId: "sony-no-live",
-      name: "No Live Matches on SonyLIV Right Now",
-      mpd: "https://xoended.vercel.app/xoended.m3u8",
-      groupTitle: categoryName,
-      logoUrl: "https://ik.imagekit.io/yjtx9nh9y/IMG_20250207_083415_447.jpg",
-    }
-  ];
+
+  if (!m3u.includes("#EXTINF")) {
+    const fallbackLogo = "https://ik.imagekit.io/yjtx9nh9y/IMG_20250207_083415_447.jpg";
+    const fallbackVideoUrl = "https://xoended.vercel.app/xoended.m3u8";
+    m3u += `#EXTINF:-1 tvg-id="sony-no-live" tvg-logo="${fallbackLogo}" group-title="${categoryName}" group-logo="${categoryLogo}",No Live Matches on SonyLIV Right Now\n`;
+    m3u += `${fallbackVideoUrl}\n\n`;
+  }
+
+  return m3u + (!m3u.endsWith("\n\n") ? "\n\n" : "");
 }
 
-// Dynamic Fetcher: 4. CRIC HD LOGIC
-async function fetchCricHD(): Promise<any[]> {
+// ==========================================
+// 4. CRIC HD LOGIC
+// ==========================================
+async function buildCricHD(): Promise<string> {
   const m3uUrl = "https://raw.githubusercontent.com/srhady/crichd-speical-live-event/refs/heads/main/playlist.m3u";
   const categoryName = "CricHD";
   const categoryLogo = "https://ik.imagekit.io/yjtx9nh9y/images%20(2).jpeg";
-  
+  let m3u = "";
+
   try {
-    const res = await fetch(`${m3uUrl}?t=${Date.now()}`);
+    const res = await fetch(`${m3uUrl}?t=${Date.now()}`, { headers: { 'Cache-Control': 'no-cache' } });
     if (res.ok) {
-      const text = await res.text();
-      const chans = parseM3uText(text, categoryName, categoryLogo);
-      if (chans.length > 0) return chans;
+      let textData = await res.text();
+      const lines = textData.split('\n');
+      let cleanLines = [];
+      
+      for (let line of lines) {
+        line = line.trim();
+        if (!line) continue;
+        
+        if (line.startsWith('#EXTM3U') || line.startsWith('#name:') || 
+            line.startsWith('#total channels:') || line.startsWith('#online channels:') || 
+            line.startsWith('#telegram:') || line.startsWith('#owner:') || 
+            line.startsWith('#last update time:') || line.startsWith('# ---')) {
+          continue; 
+        }
+
+        if (line.startsWith('#EXTINF')) {
+          line = line.replace(/\s*group-logo="[^"]*"/g, '');
+          line = line.replace(/group-title="[^"]*"/g, `group-title="${categoryName}" group-logo="${categoryLogo}"`);
+          cleanLines.push(line);
+        } else {
+          cleanLines.push(line);
+          if (!line.startsWith('#')) {
+             cleanLines.push(''); 
+          }
+        }
+      }
+      m3u = cleanLines.join('\n');
     }
   } catch (e) {
-    console.error("CricHD Parser Error", e);
+    console.error("CricHD Error", e);
   }
-  
-  return [
-    {
-      contentId: "crichd-no-live",
-      name: "No Channels on CricHD Right Now",
-      mpd: "https://xoended.vercel.app/xoended.m3u8",
-      groupTitle: categoryName,
-      logoUrl: "https://ik.imagekit.io/yjtx9nh9y/IMG_20250207_083415_447.jpg",
-    }
-  ];
+
+  if (!m3u.includes("#EXTINF")) {
+    const fallbackLogo = "https://ik.imagekit.io/yjtx9nh9y/IMG_20250207_083415_447.jpg";
+    const fallbackVideoUrl = "https://xoended.vercel.app/xoended.m3u8";
+    m3u += `#EXTINF:-1 tvg-id="crichd-no-live" tvg-logo="${fallbackLogo}" group-title="${categoryName}" group-logo="${categoryLogo}",No Channels on CricHD Right Now\n`;
+    m3u += `${fallbackVideoUrl}\n\n`;
+  }
+
+  return m3u + (!m3u.endsWith("\n\n") ? "\n\n" : "");
 }
 
-// Dynamic Fetcher: 5. FIFA PLUS LOGIC
-async function fetchFifaPlus(): Promise<any[]> {
+// ==========================================
+// 5. FIFA PLUS LOGIC
+// ==========================================
+async function buildFifaPlus(): Promise<string> {
   const m3uUrl = "https://raw.githubusercontent.com/srhady/fifaplus/refs/heads/main/fifa_live.m3u";
   const categoryName = "FIFA Plus";
   const categoryLogo = "https://ik.imagekit.io/yjtx9nh9y/images.png";
-  
+  let m3u = "";
+
   try {
-    const res = await fetch(`${m3uUrl}?t=${Date.now()}`);
+    const res = await fetch(`${m3uUrl}?t=${Date.now()}`, { headers: { 'Cache-Control': 'no-cache' } });
     if (res.ok) {
-      const text = await res.text();
-      const chans = parseM3uText(text, categoryName, categoryLogo);
-      if (chans.length > 0) return chans;
+      let textData = await res.text();
+      const lines = textData.split('\n');
+      let cleanLines = [];
+      
+      for (let line of lines) {
+        line = line.trim();
+        if (!line) continue;
+
+        if (line.startsWith('#EXTM3U') || line.startsWith('#name:') || 
+            line.startsWith('#telegram:') || line.startsWith('#owner:') || 
+            line.startsWith('#last update time:')) {
+          continue;
+        }
+
+        if (line.startsWith('#EXTINF')) {
+          line = line.replace(/\s*group-logo="[^"]*"/g, '');
+          line = line.replace(/group-title="[^"]*"/g, `group-title="${categoryName}" group-logo="${categoryLogo}"`);
+          cleanLines.push(line);
+        } else {
+          cleanLines.push(line);
+          if (!line.startsWith('#')) {
+            cleanLines.push('');
+          }
+        }
+      }
+      m3u = cleanLines.join('\n');
     }
   } catch (e) {
-    console.error("FIFA Plus Parser Error", e);
+    console.error("FIFA Plus Error", e);
   }
-  
-  return [
-    {
-      contentId: "fifa-no-live",
-      name: "No Live Matches on FIFA Plus Right Now",
-      mpd: "https://xoended.vercel.app/xoended.m3u8",
-      groupTitle: categoryName,
-      logoUrl: "https://ik.imagekit.io/yjtx9nh9y/IMG_20250207_083415_447.jpg",
-    }
-  ];
+
+  if (!m3u.includes("#EXTINF")) {
+    const fallbackLogo = "https://ik.imagekit.io/yjtx9nh9y/IMG_20250207_083415_447.jpg";
+    const fallbackVideoUrl = "https://xoended.vercel.app/xoended.m3u8";
+    m3u += `#EXTINF:-1 tvg-id="fifa-no-live" tvg-logo="${fallbackLogo}" group-title="${categoryName}" group-logo="${categoryLogo}",No Live Matches on FIFA Plus Right Now\n`;
+    m3u += `${fallbackVideoUrl}\n\n`;
+  }
+
+  return m3u + (!m3u.endsWith("\n\n") ? "\n\n" : "");
 }
 
-// Dynamic Fetcher: 6. STAR SPORTS LOGIC
-async function fetchStarSports(): Promise<any[]> {
+// ==========================================
+// 6. STAR SPORTS (BUFFERING & CF-BYPASS FIX)
+// ==========================================
+async function buildStarSports(): Promise<string> {
   const m3uUrl = "https://raw.githubusercontent.com/alex4528y/m3u/refs/heads/main/jtv.m3u";
   const categoryName = "Star Sports";
   const categoryLogo = "https://ik.imagekit.io/yjtx9nh9y/947787.jpg"; 
-  
+  let m3u = "";
+
   try {
-    const res = await fetch(`${m3uUrl}?t=${Date.now()}`, {
-      headers: {
+    const res = await fetch(`${m3uUrl}?t=${Date.now()}`, { 
+      headers: { 
+        'Cache-Control': 'no-cache',
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-      }
+      } 
     });
+    
     if (res.ok) {
-      const text = await res.text();
-      const chans = parseM3uText(text, categoryName, categoryLogo, true);
-      if (chans.length > 0) return chans;
+      let textData = await res.text();
+      const lines = textData.split('\n');
+      let cleanLines = [];
+      let keepChannel = false;
+      
+      for (let line of lines) {
+        line = line.trim();
+        if (!line) continue;
+
+        if (line.startsWith('#EXTM3U') || line.startsWith('#name:') || 
+            line.startsWith('#total channels:') || line.startsWith('#telegram:')) {
+          continue;
+        }
+
+        if (line.startsWith('#EXTINF')) {
+          if (line.toLowerCase().includes("star sports")) {
+            keepChannel = true;
+            
+            line = line.replace(/\s*group-logo="[^"]*"/g, '');
+            if (line.includes('group-title=')) {
+              line = line.replace(/group-title="[^"]*"/g, `group-title="${categoryName}" group-logo="${categoryLogo}"`);
+            } else {
+              const commaIndex = line.indexOf(',');
+              if (commaIndex !== -1) {
+                line = line.slice(0, commaIndex) + ` group-title="${categoryName}" group-logo="${categoryLogo}"` + line.slice(commaIndex);
+              }
+            }
+            cleanLines.push(line);
+            
+            // 🔥 TWEAK 1: Force IPTV Players to Cache 3 Seconds of Video (Stops Stuttering)
+            cleanLines.push(`#EXTVLCOPT:network-caching=3000`);
+            cleanLines.push(`#EXTVLCOPT:live-caching=3000`);
+
+          } else {
+            keepChannel = false;
+          }
+        } else if (keepChannel) {
+          
+          // 🔥 TWEAK 2: Inject bypass tag to stop Cloudflare from causing Double-Connection Rate Limits
+          if (line.startsWith('http')) {
+            let urlPart = line;
+            let modifierPart = "";
+            if (line.includes("|")) {
+              const parts = line.split("|");
+              urlPart = parts[0];
+              modifierPart = "|" + parts.slice(1).join("|");
+            }
+            
+            urlPart += urlPart.includes("?") ? "&xobypass=true" : "?xobypass=true";
+            line = urlPart + modifierPart;
+          }
+
+          cleanLines.push(line);
+          if (!line.startsWith('#')) {
+            cleanLines.push(''); 
+            keepChannel = false;
+          }
+        }
+      }
+      m3u = cleanLines.join('\n');
     }
   } catch (e) {
-    console.error("Star Sports Parser Error", e);
+    console.error("Star Sports Error", e);
   }
-  
-  return [
-    {
-      contentId: "starsports-no-live",
-      name: "No Star Sports Channels Available Right Now",
-      mpd: "https://xoended.vercel.app/xoended.m3u8",
-      groupTitle: categoryName,
-      logoUrl: "https://ik.imagekit.io/yjtx9nh9y/IMG_20250207_083415_447.jpg",
-    }
-  ];
+
+  if (!m3u.includes("#EXTINF")) {
+    const fallbackLogo = "https://ik.imagekit.io/yjtx9nh9y/IMG_20250207_083415_447.jpg";
+    const fallbackVideoUrl = "https://xoended.vercel.app/xoended.m3u8";
+    m3u += `#EXTINF:-1 tvg-id="starsports-no-live" tvg-logo="${fallbackLogo}" group-title="${categoryName}" group-logo="${categoryLogo}",No Star Sports Channels Available Right Now\n`;
+    m3u += `${fallbackVideoUrl}\n\n`;
+  }
+
+  return m3u + (!m3u.endsWith("\n\n") ? "\n\n" : "");
 }
 
-// Static/Dynamic Generator: 7. SUPPORT LOGIC
-function buildSupport(): any[] {
+// ==========================================
+// 7. TELEGRAM SUPPORT LOGIC
+// ==========================================
+async function buildSupport(): Promise<string> {
   const categoryName = "𝗦𝗨𝗣𝗣𝗢𝗥𝗧"; 
   const categoryLogo = "https://ik.imagekit.io/yjtx9nh9y/sllmnhx-telegram-6896827.svg?updatedAt=1777824421413";
   const channelName = "@xocietylive";
   const channelLogo = "https://ik.imagekit.io/yjtx9nh9y/IMG_20250207_083415_447.jpg";
   const streamUrl = "https://xociety-intro.vercel.app/xociety.m3u8";
 
-  return [
-    {
-      contentId: "support-channel",
-      name: channelName,
-      mpd: streamUrl,
-      groupTitle: categoryName,
-      logoUrl: channelLogo,
-      kodiprops: [],
-      extraOpts: []
-    }
-  ];
+  let m3u = `#EXTINF:-1 tvg-id="support-channel" tvg-logo="${channelLogo}" group-title="${categoryName}" group-logo="${categoryLogo}",${channelName}\n`;
+  m3u += `${streamUrl}\n\n`;
+
+  return m3u;
 }
 
 // Resilient Parser for standard remote M3U playlist feed
@@ -644,9 +708,9 @@ async function parseM3uUrl(url: string) {
 }
 
 // Core database loaders pulling from Jio & worker streams synchronously
-async function fetchJioData() {
+async function fetchJioData(force = false) {
   const now = Date.now();
-  if (cacheData && (now - lastFetched < CACHE_STRL_MS)) {
+  if (!force && cacheData && (now - lastFetched < CACHE_STRL_MS)) {
     return cacheData;
   }
   
@@ -715,16 +779,23 @@ async function fetchJioData() {
   
   console.log("[Source] Merging multifeed scraper streams...");
   try {
-    const [fcChannels, iccChannels, sonyChannels, cricChannels, fifaChannels, starSportsChannels] = await Promise.all([
-      fetchFanCode(),
-      fetchIccTv(),
-      fetchSonyLiv(),
-      fetchCricHD(),
-      fetchFifaPlus(),
-      fetchStarSports()
+    const [fcM3u, iccM3u, sonyM3u, cricM3u, fifaM3u, starM3u, supportM3u] = await Promise.all([
+      buildFanCode(),
+      buildIccTv(),
+      buildSonyLiv(),
+      buildCricHD(),
+      buildFifaPlus(),
+      buildStarSports(),
+      buildSupport()
     ]);
-    
-    const supportChannels = buildSupport();
+
+    const fcChannels = parseM3uTextToChannels(fcM3u, "https://ik.imagekit.io/yjtx9nh9y/vecteezy_fancode-app-icon-on-transparent-background_69146538.png");
+    const iccChannels = parseM3uTextToChannels(iccM3u, "https://ik.imagekit.io/yjtx9nh9y/62823e9932b32411608aa856.png");
+    const sonyChannels = parseM3uTextToChannels(sonyM3u, "https://ik.imagekit.io/yjtx9nh9y/sony-liv-logo-hd.png");
+    const cricChannels = parseM3uTextToChannels(cricM3u, "https://ik.imagekit.io/yjtx9nh9y/images%20(2).jpeg");
+    const fifaChannels = parseM3uTextToChannels(fifaM3u, "https://ik.imagekit.io/yjtx9nh9y/images.png");
+    const starSportsChannels = parseM3uTextToChannels(starM3u, "https://ik.imagekit.io/yjtx9nh9y/947787.jpg");
+    const supportChannels = parseM3uTextToChannels(supportM3u, "https://ik.imagekit.io/yjtx9nh9y/sllmnhx-telegram-6896827.svg?updatedAt=1777824421413");
     
     // Process original Jio channels (keep "JioS2 " prefix)
     const originalJio = baseJioData.livechannels.map((ch: any) => {
@@ -750,7 +821,7 @@ async function fetchJioData() {
       return {
         ...ch,
         groupTitle: cleanGroupTitle(groupName, false),
-        logoUrl: ch.logoUrl || `https://jiotvimages.live.jio.com/jiotv_images/${ch.contentId}_logo.png`
+        logoUrl: ch.logoUrl || ch.logoUrl || `https://jiotvimages.live.jio.com/jiotv_images/${ch.contentId}_logo.png`
       };
     });
     
@@ -863,32 +934,43 @@ const playlistHandler = async (req: express.Request, res: express.Response): Pro
   const outputFormat = (req.query.format as string) || "tivimate"; // "tivimate", "standard-opt", "clean"
   
   try {
-    const jioData = await fetchJioData();
+    const jioData = await fetchJioData(true);
     if (!jioData || !jioData.livechannels) {
       return res.status(500).send("#EXTM3U\n# Unable to fetch active IPTV database");
     }
     
-    const channels = jioData.livechannels;
-    
-    let m3u = `#EXTM3U x-tvg-url="https://raw.githubusercontent.com/mitthu786/mitthu786/main/jio/epg.xml.gz"\n`;
-    m3u += `# PLAYLIST SECURED & POWERED BY CARTEL SECURITY SYSTEMS\n`;
-    m3u += `# For support or updates, join our Telegram Channel: ${config.telegramUrl}\n\n`;
-    
-    let protocol = req.protocol;
-    const rHost = req.get("host") || "";
-    if (rHost.includes("run.app") || rHost.includes("vercel.app") || req.secure) {
-      protocol = "https";
+    // 1. Gather all Scraper M3U blocks
+    const [fancodeM3u, iccM3u, sonyM3u, crichdM3u, fifaM3u, starSportsM3u, supportM3u] = await Promise.all([
+      buildFanCode(),
+      buildIccTv(),
+      buildSonyLiv(),
+      buildCricHD(),
+      buildFifaPlus(),
+      buildStarSports(),
+      buildSupport()
+    ]);
+
+    let combinedStreams = fancodeM3u + iccM3u + sonyM3u + crichdM3u + fifaM3u + starSportsM3u + supportM3u;
+
+    if (!combinedStreams.includes("#EXTINF")) {
+      const fallbackVideoUrl = "https://xoended.vercel.app/xoended.m3u8";
+      const fallbackLogo = "https://ik.imagekit.io/yjtx9nh9y/IMG_20250207_083415_447.jpg";
+      combinedStreams = `#EXTINF:-1 tvg-id="no-stream" tvg-name="No Live Events" tvg-logo="${fallbackLogo}" group-title="Information",No Live Events Right Now\n${fallbackVideoUrl}\n\n`;
     }
-    const host = `${protocol}://${rHost}`;
-    
-    for (const channel of channels) {
+
+    // 2. Format JioTV channels in M3U format
+    let jioM3u = "";
+    const originalJioChannels = jioData.livechannels.filter((ch: any) => {
+      const gTitle = ch.groupTitle || "";
+      return gTitle.startsWith("JioS2 ");
+    });
+
+    for (const channel of originalJioChannels) {
       const { contentId, name, mpd, cookie } = channel;
       const chUA = channel.userAgent || jioData.headers?.["user-agent"] || "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36";
       const groupTitle = channel.groupTitle || getChannelCategory(name);
       const chLogo = channel.logoUrl || `https://jiotvimages.live.jio.com/jiotv_images/${contentId}_logo.png`;
       const groupLogoUrl = getGroupLogo(groupTitle);
-      
-      const wrappedMpd = wrapStreamUrl(mpd, host);
 
       // Build kodi props text block
       let kodiPropsBlock = "";
@@ -898,7 +980,7 @@ const playlistHandler = async (req: express.Request, res: express.Response): Pro
         }
       }
       
-      // Build Extra VLCOPTS block (specifically for network-caching or referer)
+      // Build Extra VLCOPTS block
       let extraOptsBlock = "";
       if (channel.extraOpts && channel.extraOpts.length > 0) {
         for (const opt of channel.extraOpts) {
@@ -907,31 +989,86 @@ const playlistHandler = async (req: express.Request, res: express.Response): Pro
       }
       
       if (outputFormat === "tivimate") {
-        m3u += `#EXTINF:-1 tvg-id="${contentId}" tvg-name="${name}" tvg-logo="${chLogo}" group-title="${groupTitle}" group-logo="${groupLogoUrl}", ${name}\n`;
-        if (kodiPropsBlock) m3u += kodiPropsBlock;
-        if (extraOptsBlock) m3u += extraOptsBlock;
-        m3u += `#EXTVLCOPT:http-user-agent=${chUA}\n`;
-        if (cookie) m3u += `#EXTVLCOPT:http-cookie=${cookie}\n`;
-        m3u += `${wrappedMpd}|User-Agent=${encodeURIComponent(chUA)}${cookie ? '&Cookie=' + encodeURIComponent(cookie) : ''}\n\n`;
+        jioM3u += `#EXTINF:-1 tvg-id="${contentId}" tvg-name="${name}" tvg-logo="${chLogo}" group-title="${groupTitle}" group-logo="${groupLogoUrl}", ${name}\n`;
+        if (kodiPropsBlock) jioM3u += kodiPropsBlock;
+        if (extraOptsBlock) jioM3u += extraOptsBlock;
+        jioM3u += `#EXTVLCOPT:http-user-agent=${chUA}\n`;
+        if (cookie) jioM3u += `#EXTVLCOPT:http-cookie=${cookie}\n`;
+        jioM3u += `${mpd}|User-Agent=${encodeURIComponent(chUA)}${cookie ? '&Cookie=' + encodeURIComponent(cookie) : ''}\n\n`;
       } else if (outputFormat === "standard-opt") {
-        m3u += `#EXTINF:-1 tvg-id="${contentId}" tvg-name="${name}" tvg-logo="${chLogo}" group-title="${groupTitle}" group-logo="${groupLogoUrl}", ${name}\n`;
-        if (kodiPropsBlock) m3u += kodiPropsBlock;
-        if (extraOptsBlock) m3u += extraOptsBlock;
-        m3u += `#EXTVLCOPT:http-user-agent=${chUA}\n`;
-        if (cookie) m3u += `#EXTVLCOPT:http-cookie=${cookie}\n`;
-        m3u += `${wrappedMpd}\n\n`;
+        jioM3u += `#EXTINF:-1 tvg-id="${contentId}" tvg-name="${name}" tvg-logo="${chLogo}" group-title="${groupTitle}" group-logo="${groupLogoUrl}", ${name}\n`;
+        if (kodiPropsBlock) jioM3u += kodiPropsBlock;
+        if (extraOptsBlock) jioM3u += extraOptsBlock;
+        jioM3u += `#EXTVLCOPT:http-user-agent=${chUA}\n`;
+        if (cookie) jioM3u += `#EXTVLCOPT:http-cookie=${cookie}\n`;
+        jioM3u += `${mpd}\n\n`;
       } else {
-        m3u += `#EXTINF:-1 tvg-id="${contentId}" tvg-name="${name}" tvg-logo="${chLogo}" group-title="${groupTitle}" group-logo="${groupLogoUrl}", ${name}\n`;
-        if (kodiPropsBlock) m3u += kodiPropsBlock;
-        if (extraOptsBlock) m3u += extraOptsBlock;
-        m3u += `${wrappedMpd}${channel.userAgent ? '|User-Agent=' + encodeURIComponent(channel.userAgent) : ''}${cookie ? '&Cookie=' + encodeURIComponent(cookie) : ''}\n\n`;
+        jioM3u += `#EXTINF:-1 tvg-id="${contentId}" tvg-name="${name}" tvg-logo="${chLogo}" group-title="${groupTitle}" group-logo="${groupLogoUrl}", ${name}\n`;
+        if (kodiPropsBlock) jioM3u += kodiPropsBlock;
+        if (extraOptsBlock) jioM3u += extraOptsBlock;
+        jioM3u += `${mpd}${channel.userAgent ? '|User-Agent=' + encodeURIComponent(channel.userAgent) : ''}${cookie ? '&Cookie=' + encodeURIComponent(cookie) : ''}\n\n`;
       }
     }
-    
+
+    // 3. Construct total master M3U
+    const author = "𝐒𝐄𝐂𝐑𝐄𝐓 𝐒𝐎𝐂𝐈𝐄𝐓𝐘";
+    const telegram = "https://t.me/xocietylive";
+    const dateNow = new Date().toLocaleString('en-GB', { 
+      day: '2-digit', month: '2-digit', year: 'numeric', 
+      hour: '2-digit', minute: '2-digit', hour12: true 
+    }).replace(',', '');
+
+    let masterM3u = `#EXTM3U x-tvg-url="https://raw.githubusercontent.com/mitthu786/mitthu786/main/jio/epg.xml.gz"\n`;
+    masterM3u += `#DATE:- ${dateNow}\n`;
+    masterM3u += `# Written and Directed by ✨ ${author} ✨\n`;
+    masterM3u += `# Join us on Telegram: ${telegram}\n\n`;
+
+    // Combine JioTV and Scrapers
+    let totalPayload = jioM3u + combinedStreams;
+
+    // 🛡️ URL WRAPPER LOGIC MATCHING SCRIPT EXACTLY
+    let protocol = req.protocol;
+    const rHost = req.get("host") || "";
+    if (rHost.includes("run.app") || rHost.includes("vercel.app") || req.secure) {
+      protocol = "https";
+    }
+    const host = `${protocol}://${rHost}`;
+
+    totalPayload = totalPayload.split('\n').map(line => {
+      let tLine = line.trim();
+      
+      // 🚨 FIX: Skip wrapper for Sony and SonyLIV links to prevent playback failure
+      if (tLine.startsWith("http") && 
+          !tLine.includes(".mpd") && 
+          !tLine.includes("sony") &&
+          !tLine.includes("snyliv") &&
+          !tLine.includes("xofix.vercel.app") && 
+          !tLine.includes("xoended.vercel.app") && 
+          !tLine.includes("xociety-intro.vercel.app") && 
+          !tLine.includes("xobypass=true") && 
+          !tLine.includes(host)) {
+          
+        let baseUrl = tLine;
+        let modifiers = "";
+        
+        if (tLine.includes("|")) {
+          const parts = tLine.split("|");
+          baseUrl = parts[0];
+          modifiers = "|" + parts.slice(1).join("|");
+        }
+        
+        return `${host}/play?url=${encodeURIComponent(baseUrl)}${modifiers}`;
+      }
+      return line;
+    }).join('\n');
+
+    masterM3u += totalPayload;
+    masterM3u = masterM3u.replace(/\n{3,}/g, '\n\n');
+
     res.setHeader("Content-Type", "application/x-mpegurl; charset=utf-8");
-    res.setHeader("Content-Disposition", 'attachment; filename="jiotvplus.m3u"');
+    res.setHeader("Content-Disposition", 'inline; filename="jiotvplus.m3u"');
     res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
-    res.status(200).send(m3u);
+    res.status(200).send(masterM3u.trim());
   } catch (err: any) {
     console.error("[Playlist] Generation Error:", err);
     res.status(500).send(`#EXTM3U\n# Error generating secured playlist: ${err.message || err}`);
