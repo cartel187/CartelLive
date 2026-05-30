@@ -8,7 +8,7 @@ const router = express.Router();
 // Mock memory storage for tokens (will fall back to environment variables or defaults)
 const config = {
   telegramUrl: process.env.MY_TELEGRAM_LINK || "https://t.me/cartel187",
-  secureToken: process.env.SECURE_TOKEN || "cartel-vip",
+  secureToken: process.env.SECURE_TOKEN || "cartel187",
   jioJsonUrl: "https://jiotvplus.dr-strange.workers.dev/watch/fetch.json",
   jioM3uUrl: "https://jiotvplus.dr-strange.workers.dev/api/jiotvplus.m3u",
   preferredSource: "m3u",
@@ -1049,6 +1049,7 @@ const playlistHandler = async (req: express.Request, res: express.Response): Pro
 };
 
 // Mount endpoints
+router.get("/", handleSecurityGate, playlistHandler);
 router.get("/playlist", handleSecurityGate, playlistHandler);
 router.get("/playlist.m3u", handleSecurityGate, playlistHandler);
 router.get("/jiotvplus.m3u", handleSecurityGate, playlistHandler);
