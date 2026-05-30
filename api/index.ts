@@ -1091,8 +1091,8 @@ router.get("/config", (req, res) => {
     enableTokenProtection: config.enableTokenProtection,
     enableUserAgentCheck: config.enableUserAgentCheck,
     lastFetchedTime: lastFetched ? new Date(lastFetched).toISOString() : null,
-    jioSourceUrl: config.jioJsonUrl,
-    jioM3uUrl: config.jioM3uUrl,
+    jioSourceUrl: "https://****** [Connected (Secure Feed)]",
+    jioM3uUrl: "https://****** / Protected Feed Link",
     preferredSource: config.preferredSource,
   });
 });
@@ -1106,7 +1106,20 @@ router.post("/config", express.json(), (req, res) => {
   if (enableUserAgentCheck !== undefined) config.enableUserAgentCheck = enableUserAgentCheck;
   if (preferredSource !== undefined) config.preferredSource = preferredSource;
   
-  res.json({ success: true, message: "Configuration adjusted successfully", config });
+  res.json({
+    success: true,
+    message: "Configuration adjusted successfully",
+    config: {
+      telegramUrl: config.telegramUrl,
+      secureToken: config.secureToken,
+      enableTokenProtection: config.enableTokenProtection,
+      enableUserAgentCheck: config.enableUserAgentCheck,
+      lastFetchedTime: lastFetched ? new Date(lastFetched).toISOString() : null,
+      jioSourceUrl: "https://****** [Connected (Secure Feed)]",
+      jioM3uUrl: "https://****** / Protected Feed Link",
+      preferredSource: config.preferredSource,
+    }
+  });
 });
 
 // Stream redirect guard
