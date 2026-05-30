@@ -966,7 +966,7 @@ const playlistHandler = async (req: express.Request, res: express.Response): Pro
 
     if (!combinedStreams.includes("#EXTINF")) {
       const fallbackVideoUrl = "https://xoended.vercel.app/xoended.m3u8";
-      const fallbackLogo = "https://ik.imagekit.io/yjtx9nh9y/IMG_20250207_083415_447.jpg";
+      const fallbackLogo = "https://ik.imagekit.io/yjtx9nh9y/Black%20White%20Minimal%20Simple%20Modern%20Pixel%20Neon%20%20Modern%20AI%20Logo.png";
       combinedStreams = `#EXTINF:-1 tvg-id="no-stream" tvg-name="No Live Events" tvg-logo="${fallbackLogo}" group-title="Information",No Live Events Right Now\n${fallbackVideoUrl}\n\n`;
     }
 
