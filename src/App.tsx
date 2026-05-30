@@ -30,7 +30,7 @@ export default function App() {
   // Config state
   const [config, setConfig] = useState<GuardConfig>({
     telegramUrl: "https://t.me/cartel187",
-    secureToken: "cartel-vip",
+    secureToken: "cartel187",
     enableTokenProtection: true,
     enableUserAgentCheck: true,
     lastFetchedTime: null,
@@ -160,9 +160,9 @@ export default function App() {
   };
 
   // Safe M3U URLs based on dynamic settings
-  const generatedM3uPath = `/api/jiotvplus.m3u?token=${config.secureToken}&format=${selectedFormat}`;
+  const generatedM3uPath = `/api?token=${config.secureToken}&format=${selectedFormat}`;
   const absoluteM3uUrl = `${currentOrigin}${generatedM3uPath}`;
-  const unsecureM3uUrl = `${currentOrigin}/api/jiotvplus.m3u`;
+  const unsecureM3uUrl = `${currentOrigin}/api`;
 
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text);
@@ -340,7 +340,7 @@ function getChannelGroup(name) {
 }
 
 // Core M3U compiler route
-app.get("/api/playlist", securityGate, async (req, res) => {
+app.get("/api", securityGate, async (req, res) => {
   const outputFormat = req.query.format || "tivimate";
   
   try {
@@ -378,8 +378,11 @@ app.get("/api/playlist", securityGate, async (req, res) => {
 });
 
 // Backward compatible aliases
+app.get("/api/playlist", securityGate, (req, res) => {
+  res.redirect(307, "/api?" + (req.url.split("?")[1] || ""));
+});
 app.get("/api/jiotvplus.m3u", securityGate, (req, res) => {
-  res.redirect(307, "/api/playlist?" + req.url.split("?")[1] || "");
+  res.redirect(307, "/api?" + (req.url.split("?")[1] || ""));
 });
 
 // Fast JSON stats preview for client (optional)
@@ -428,7 +431,7 @@ Quickly deploy this ultra-secure IPTV compiler directly on Vercel:
 
 ## Usage:
 Load your personalized URL in any player (TiviMate, Kodi, Apple TV, VLC):
-\`https://your-vercel-domain.vercel.app/api/playlist?token=${tokenInput}&format=tivimate\`
+\`https://your-vercel-domain.vercel.app/api?token=${tokenInput}&format=tivimate\`
 
 *Standard web browsers visited from desktop or mobiles will instantly be sent straight to your Telegram channel!*`
   };
