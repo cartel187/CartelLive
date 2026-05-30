@@ -24,7 +24,7 @@ import {
   FileCode,
   CheckCircle2
 } from "lucide-react";
-import { GuardConfig, ChannelItem, ServerStats, SimulationResult } from "./types";
+import { GuardConfig, ChannelItem, ServerStats, SimulationResult, CustomPlaylist } from "./types";
 
 export default function App() {
   // Config state
@@ -67,9 +67,127 @@ export default function App() {
   const [simulating, setSimulating] = useState(false);
 
   // UI state
-  const [activeTab, setActiveTab] = useState<"dashboard" | "channels" | "vercel" | "simulator">("dashboard");
+  const [activeTab, setActiveTab] = useState<"dashboard" | "channels" | "custom_m3u" | "vercel" | "simulator">("dashboard");
   const [copiedUrl, setCopiedUrl] = useState(false);
   const [currentOrigin, setCurrentOrigin] = useState("https://your-domain.vercel.app");
+
+  // Custom M3U Playlists states
+  const [customPlaylists, setCustomPlaylists] = useState<CustomPlaylist[]>([]);
+  const [loadingPlaylists, setLoadingPlaylists] = useState(false);
+  const [playlistsError, setPlaylistsError] = useState<string | null>(null);
+  const [newPlaylistName, setNewPlaylistName] = useState("");
+  const [newPlaylistUrl, setNewPlaylistUrl] = useState("");
+  const [newPlaylistLogo, setNewPlaylistLogo] = useState("");
+  const [editingPlaylistId, setEditingPlaylistId] = useState<string | null>(null);
+  const [addingPlaylist, setAddingPlaylist] = useState(false);
+  const [playlistSuccessMessage, setPlaylistSuccessMessage] = useState<string | null>(null);
+
+  const fetchCustomPlaylists = async () => {
+    setLoadingPlaylists(true);
+    setPlaylistsError(null);
+    try {
+      const response = await fetch("/api/custom-playlists");
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success) {
+          setCustomPlaylists(data.playlists || []);
+        } else {
+          setPlaylistsError(data.error || "Failed to load custom playlists");
+        }
+      } else {
+        setPlaylistsError(`Server returned status ${response.status}`);
+      }
+    } catch (e: any) {
+      setPlaylistsError(e.message || "Network error loading custom playlists");
+    } finally {
+      setLoadingPlaylists(false);
+    }
+  };
+
+  const handleSavePlaylist = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newPlaylistName.trim() || !newPlaylistUrl.trim()) {
+      setPlaylistsError("Name and M3U URL are required.");
+      return;
+    }
+    setAddingPlaylist(true);
+    setPlaylistsError(null);
+    try {
+      const body: any = {
+        name: newPlaylistName.trim(),
+        url: newPlaylistUrl.trim(),
+        logo: newPlaylistLogo.trim() || undefined
+      };
+      if (editingPlaylistId) {
+        body.id = editingPlaylistId;
+      }
+      const response = await fetch("/api/custom-playlists", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body)
+      });
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success) {
+          setCustomPlaylists(data.playlists || []);
+          setNewPlaylistName("");
+          setNewPlaylistUrl("");
+          setNewPlaylistLogo("");
+          setEditingPlaylistId(null);
+          setPlaylistSuccessMessage(editingPlaylistId ? "Playlist updated successfully!" : "Playlist added successfully!");
+          setTimeout(() => setPlaylistSuccessMessage(null), 3500);
+          fetchChannels(); // Refresh channel database preview list!
+        } else {
+          setPlaylistsError(data.error || "Failed to save custom playlist");
+        }
+      } else {
+        setPlaylistsError(`Server returned status ${response.status}`);
+      }
+    } catch (e: any) {
+      setPlaylistsError(e.message || "Network error saving playlist");
+    } finally {
+      setAddingPlaylist(false);
+    }
+  };
+
+  const handleDeletePlaylist = async (id: string) => {
+    if (!window.confirm("Are you sure you want to delete this playlist?")) return;
+    setPlaylistsError(null);
+    try {
+      const response = await fetch(`/api/custom-playlists/${id}`, {
+        method: "DELETE"
+      });
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success) {
+          setCustomPlaylists(prev => prev.filter(p => p.id !== id));
+          setPlaylistSuccessMessage("Playlist deleted successfully.");
+          setTimeout(() => setPlaylistSuccessMessage(null), 3000);
+          fetchChannels(); // Refresh channel list preview!
+        } else {
+          setPlaylistsError(data.error || "Failed to delete custom playlist");
+        }
+      } else {
+        setPlaylistsError(`Server returned status ${response.status}`);
+      }
+    } catch (e: any) {
+      setPlaylistsError(e.message || "Network error deleting playlist");
+    }
+  };
+
+  const startEditPlaylist = (p: CustomPlaylist) => {
+    setEditingPlaylistId(p.id || null);
+    setNewPlaylistName(p.name);
+    setNewPlaylistUrl(p.url);
+    setNewPlaylistLogo(p.logo || "");
+  };
+
+  const cancelEditPlaylist = () => {
+    setEditingPlaylistId(null);
+    setNewPlaylistName("");
+    setNewPlaylistUrl("");
+    setNewPlaylistLogo("");
+  };
 
   // Code visualizer Tab for Vercel code exports
   const [activeCodeFile, setActiveCodeFile] = useState<"vercel.json" | "api_playlist" | "package.json" | "readme">("api_playlist");
@@ -123,6 +241,7 @@ export default function App() {
   useEffect(() => {
     fetchConfig();
     fetchChannels();
+    fetchCustomPlaylists();
     if (typeof window !== "undefined") {
       setCurrentOrigin(window.location.origin);
     }
@@ -493,6 +612,12 @@ Load your personalized URL in any player (TiviMate, Kodi, Apple TV, VLC):
             Active Channels ({channels.length})
           </button>
           <button 
+            onClick={() => setActiveTab("custom_m3u")}
+            className={`cursor-pointer px-4 py-1.5 rounded-lg text-xs font-semibold tracking-wide transition-all ${activeTab === "custom_m3u" ? "bg-gradient-to-r from-purple-900/80 to-indigo-900/80 text-white shadow-md shadow-black/40 border border-purple-500/10" : "text-slate-400 hover:text-white"}`}
+          >
+            Custom M3U ({customPlaylists.length})
+          </button>
+          <button 
             onClick={() => setActiveTab("simulator")}
             className={`cursor-pointer px-4 py-1.5 rounded-lg text-xs font-semibold tracking-wide transition-all ${activeTab === "simulator" ? "bg-gradient-to-r from-purple-900/80 to-indigo-900/80 text-white shadow-md shadow-black/40 border border-purple-500/10" : "text-slate-400 hover:text-white"}`}
           >
@@ -548,25 +673,31 @@ Load your personalized URL in any player (TiviMate, Kodi, Apple TV, VLC):
         <div className="flex md:hidden bg-[#0d0f19] border border-slate-900 p-1.5 rounded-xl justify-stretch text-center gap-1">
           <button 
             onClick={() => setActiveTab("dashboard")}
-            className={`cursor-pointer flex-1 py-2 rounded-lg text-xs font-semibold tracking-wide transition-all ${activeTab === "dashboard" ? "bg-gradient-to-r from-purple-905 to-indigo-905 bg-purple-900 text-white" : "text-slate-400"}`}
+            className={`cursor-pointer flex-1 py-1 px-1 rounded-lg text-[10px] font-semibold tracking-wide transition-all ${activeTab === "dashboard" ? "bg-gradient-to-r from-purple-900 to-indigo-900 text-white" : "text-slate-400"}`}
           >
             Dashboard
           </button>
           <button 
             onClick={() => setActiveTab("channels")}
-            className={`cursor-pointer flex-1 py-2 rounded-lg text-xs font-semibold tracking-wide transition-all ${activeTab === "channels" ? "bg-gradient-to-r from-purple-905 to-indigo-905 bg-purple-900 text-white" : "text-slate-400"}`}
+            className={`cursor-pointer flex-1 py-1 px-1 rounded-lg text-[10px] font-semibold tracking-wide transition-all ${activeTab === "channels" ? "bg-gradient-to-r from-purple-900 to-indigo-900 text-white" : "text-slate-400"}`}
           >
             Channels
           </button>
           <button 
+            onClick={() => setActiveTab("custom_m3u")}
+            className={`cursor-pointer flex-1 py-1 px-1 rounded-lg text-[10px] font-semibold tracking-wide transition-all ${activeTab === "custom_m3u" ? "bg-gradient-to-r from-purple-900 to-indigo-900 text-white" : "text-slate-400"}`}
+          >
+            Custom M3U
+          </button>
+          <button 
             onClick={() => setActiveTab("simulator")}
-            className={`cursor-pointer flex-1 py-2 rounded-lg text-xs font-semibold tracking-wide transition-all ${activeTab === "simulator" ? "bg-gradient-to-r from-purple-905 to-indigo-905 bg-purple-900 text-white" : "text-slate-400"}`}
+            className={`cursor-pointer flex-1 py-1 px-1 rounded-lg text-[10px] font-semibold tracking-wide transition-all ${activeTab === "simulator" ? "bg-gradient-to-r from-purple-900 to-indigo-900 text-white" : "text-slate-400"}`}
           >
             Simulator
           </button>
           <button 
             onClick={() => setActiveTab("vercel")}
-            className={`cursor-pointer flex-1 py-2 rounded-lg text-xs font-semibold tracking-wide transition-all ${activeTab === "vercel" ? "bg-gradient-to-r from-purple-905 to-indigo-905 bg-purple-900 text-white" : "text-slate-400"}`}
+            className={`cursor-pointer flex-1 py-1 px-1 rounded-lg text-[10px] font-semibold tracking-wide transition-all ${activeTab === "vercel" ? "bg-gradient-to-r from-purple-900 to-indigo-900 text-white" : "text-slate-400"}`}
           >
             Vercel
           </button>
@@ -1282,6 +1413,179 @@ Load your personalized URL in any player (TiviMate, Kodi, Apple TV, VLC):
                     {activeCodeContent}
                   </pre>
                 </div>
+              </div>
+
+            </div>
+          </div>
+        )}
+
+        {/* Custom M3U Playlists Managing Tab */}
+        {activeTab === "custom_m3u" && (
+          <div id="custom_m3u_panel" className="bg-[#0b0d18] border border-slate-900 rounded-2xl p-6 flex flex-col gap-6">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-900/60 pb-5">
+              <div>
+                <h3 className="text-lg font-bold text-white tracking-tight flex items-center gap-2">
+                  <Layers className="w-5 h-5 text-purple-400" />
+                  <span>Custom M3U Playlists</span>
+                </h3>
+                <p className="text-xs text-slate-400 mt-1">Add remote M3U feeds dynamically and merge their live streams securely into your master playlist.</p>
+              </div>
+              <div className="text-[10px] sm:text-xs font-mono text-purple-400 bg-purple-950/30 border border-purple-500/20 px-3 py-1.5 rounded-lg flex items-center gap-1.5 shrink-0 uppercase">
+                <Check className="w-3.5 h-3.5" />
+                <span>Auto Compiled into Master</span>
+              </div>
+            </div>
+
+            {playlistSuccessMessage && (
+              <div className="bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs px-4 py-3 rounded-xl flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4 shrink-0" />
+                <span>{playlistSuccessMessage}</span>
+              </div>
+            )}
+
+            {playlistsError && (
+              <div className="bg-rose-500/10 border border-rose-500/20 text-rose-400 text-xs px-4 py-3 rounded-xl flex items-center gap-2">
+                <ShieldAlert className="w-4 h-4 shrink-0" />
+                <span>{playlistsError}</span>
+              </div>
+            )}
+
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+              
+              {/* Form Column: Add / Edit M3U URL */}
+              <form onSubmit={handleSavePlaylist} className="lg:col-span-5 bg-[#08090f] border border-slate-900/80 p-6 rounded-2xl flex flex-col gap-5">
+                <div className="text-xs font-bold text-white tracking-wide uppercase pb-2 border-b border-slate-900 flex items-center gap-1.5">
+                  <Settings className="w-4 h-4 text-purple-400" />
+                  <span>{editingPlaylistId ? "Edit M3U Playlist" : "Add M3U Playlist Source"}</span>
+                </div>
+
+                <div className="flex flex-col gap-2">
+                  <label className="text-[11px] font-semibold text-slate-400 tracking-wide uppercase">Playlist Name / Brand</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. My Hot Streams"
+                    value={newPlaylistName}
+                    onChange={(e) => setNewPlaylistName(e.target.value)}
+                    className="bg-[#05060b] border border-slate-800 text-slate-200 text-xs px-3.5 py-2.5 rounded-xl outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500/20 w-full transition-all"
+                  />
+                  <p className="text-[10px] text-slate-500">Channels inside this playlist will be auto-grouped under this category name.</p>
+                </div>
+
+                <div className="flex flex-col gap-2">
+                  <label className="text-[11px] font-semibold text-slate-400 tracking-wide uppercase">M3U Playlist Feed URL</label>
+                  <input
+                    type="url"
+                    required
+                    placeholder="https://example.com/playlist.m3u"
+                    value={newPlaylistUrl}
+                    onChange={(e) => setNewPlaylistUrl(e.target.value)}
+                    className="bg-[#05060b] border border-slate-800 text-slate-200 text-xs px-3.5 py-2.5 rounded-xl outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500/20 w-full transition-all"
+                  />
+                  <p className="text-[10px] text-slate-500">Must be a direct link to a raw M3U text file, standard playlist, or dynamically updated live stream feed.</p>
+                </div>
+
+                <div className="flex flex-col gap-2">
+                  <label className="text-[11px] font-semibold text-slate-400 tracking-wide uppercase">Playlist Logo URL (Optional)</label>
+                  <input
+                    type="url"
+                    placeholder="https://example.com/logo.png"
+                    value={newPlaylistLogo}
+                    onChange={(e) => setNewPlaylistLogo(e.target.value)}
+                    className="bg-[#05060b] border border-slate-800 text-slate-200 text-xs px-3.5 py-2.5 rounded-xl outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500/20 w-full transition-all"
+                  />
+                  <p className="text-[10px] text-slate-500">Use a fallback logo URL if none is embedded into the M3U channel elements.</p>
+                </div>
+
+                <div className="flex items-center gap-3 pt-2">
+                  <button
+                    type="submit"
+                    disabled={addingPlaylist}
+                    className="cursor-pointer bg-gradient-to-r from-purple-700 to-indigo-700 hover:from-purple-600 hover:to-indigo-600 font-bold text-xs py-2.5 px-4 rounded-xl shadow-lg border border-purple-500/10 text-white flex-1 flex items-center justify-center gap-1.5 disabled:opacity-50 transition-all font-semibold"
+                  >
+                    {addingPlaylist ? <RefreshCw className="w-4 h-4 animate-spin text-white" /> : <Send className="w-3.5 h-3.5" />}
+                    <span>{editingPlaylistId ? "Update Playlist" : "Add Playlist Source"}</span>
+                  </button>
+                  {editingPlaylistId && (
+                    <button
+                      type="button"
+                      onClick={cancelEditPlaylist}
+                      className="cursor-pointer bg-slate-900 border border-slate-800 hover:bg-slate-800 font-bold text-xs py-2.5 px-4 rounded-xl text-slate-400 transition-all font-semibold"
+                    >
+                      Cancel
+                    </button>
+                  )}
+                </div>
+              </form>
+
+              {/* List Column: Active Subscribed Remote feeds */}
+              <div className="lg:col-span-7 flex flex-col gap-4">
+                <div className="text-xs font-bold text-white tracking-wide uppercase pb-2 border-b border-slate-900 flex items-center justify-between">
+                  <span>Subscribed Feeds ({customPlaylists.length})</span>
+                  <button
+                    type="button"
+                    onClick={fetchCustomPlaylists}
+                    className="cursor-pointer text-[10px] font-mono tracking-wider text-purple-400 flex items-center gap-1 hover:text-purple-300"
+                  >
+                    <RefreshCw className="w-3 h-3" />
+                    <span>REFRESH</span>
+                  </button>
+                </div>
+
+                {loadingPlaylists ? (
+                  <div className="bg-[#05060b] border border-slate-950 rounded-2xl p-12 text-center text-slate-500 flex flex-col items-center justify-center gap-2">
+                    <RefreshCw className="w-6 h-6 animate-spin text-purple-500" />
+                    <span className="text-xs">Fetching custom playlists...</span>
+                  </div>
+                ) : customPlaylists.length === 0 ? (
+                  <div className="bg-[#05060b]/60 border border-slate-950 rounded-2xl p-12 text-center text-slate-500 flex flex-col items-center justify-center gap-3">
+                    <Layers className="w-8 h-8 text-slate-700 animate-pulse" />
+                    <span className="text-xs font-semibold text-slate-400">No Custom Sources Subscribed Yet</span>
+                    <p className="text-[11px] text-slate-600 max-w-xs leading-relaxed">
+                      Put an M3U stream URL in the left form and name it. They will automatically be fetched, parsed, and combined with your JioTV streams securely.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="flex flex-col gap-3.5">
+                    {customPlaylists.map((playlist) => (
+                      <div key={playlist.id} className="bg-[#08090f] border border-slate-900 rounded-2xl p-4 flex items-center justify-between gap-4 hover:border-slate-800 transition-all">
+                        <div className="flex items-center gap-3 min-w-0">
+                          <img
+                            referrerPolicy="no-referrer"
+                            src={playlist.logo || "https://ik.imagekit.io/yjtx9nh9y/Black%20White%20Minimal%20Simple%20Modern%20Pixel%2520Neon_Modern%2520AI%2520Logo.png"}
+                            alt={playlist.name}
+                            className="w-10 h-10 object-contain rounded-xl bg-slate-950 border border-slate-900 shrink-0"
+                            onError={(e) => {
+                              (e.target as HTMLImageElement).src = "https://ik.imagekit.io/yjtx9nh9y/Black%20White%20Minimal%20Simple%20Modern%20Pixel%2520Neon_Modern%2520AI%2520Logo.png";
+                            }}
+                          />
+                          <div className="min-w-0 flex flex-col gap-0.5">
+                            <span className="text-xs font-bold text-white truncate">{playlist.name}</span>
+                            <span className="text-[9px] text-slate-500 truncate font-mono">{playlist.url}</span>
+                            <span className="text-[9px] text-purple-400 font-mono tracking-wider font-semibold uppercase mt-0.5">M3U STREAM FEED</span>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-2 shrink-0">
+                          <button
+                            type="button"
+                            onClick={() => startEditPlaylist(playlist)}
+                            className="cursor-pointer bg-purple-950/30 hover:bg-purple-900/30 text-purple-400 text-[11px] font-semibold py-1.5 px-3 rounded-lg border border-purple-500/15 transition-all"
+                          >
+                            Edit
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => playlist.id && handleDeletePlaylist(playlist.id)}
+                            className="cursor-pointer bg-rose-950/20 hover:bg-rose-900/30 text-rose-400 text-[11px] font-semibold py-1.5 px-3 rounded-lg border border-rose-500/10 transition-all"
+                          >
+                            Delete
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
 
             </div>
