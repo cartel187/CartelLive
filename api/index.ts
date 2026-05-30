@@ -128,8 +128,7 @@ function wrapStreamUrl(urlStr: string, host: string): string {
     lowerUrl.includes(".mpd") ||
     lowerUrl.includes("sony") ||
     lowerUrl.includes("snyliv") ||
-    lowerUrl.includes("xofix.vercel.app") ||
-    lowerUrl.includes("xoended.vercel.app") ||
+    lowerUrl.includes("cartelended.vercel.app") ||
     lowerUrl.includes("xociety-intro.vercel.app") ||
     lowerUrl.includes("xobypass=true") ||
     urlStr.includes(host)
@@ -285,8 +284,8 @@ async function buildFanCode(): Promise<string> {
   }
 
   if (!m3u.includes("#EXTINF")) {
-    const fallbackLogo = "https://ik.imagekit.io/yjtx9nh9y/IMG_20250207_083415_447.jpg";
-    const fallbackVideoUrl = "https://xoended.vercel.app/xoended.m3u8";
+    const fallbackLogo = "https://ik.imagekit.io/yjtx9nh9y/Black%20White%20Minimal%20Simple%20Modern%20Pixel%20Neon%20%20Modern%20AI%20Logo.png?updatedAt=1780156943081";
+    const fallbackVideoUrl = "https://cartelended.vercel.app/cartelended.m3u8";
     m3u += `#EXTINF:-1 tvg-id="fancode-no-live" tvg-logo="${fallbackLogo}" group-title="${boldCategory}" group-logo="${fcGroupLogo}",No Live Matches on FanCode Right Now\n`;
     m3u += `${fallbackVideoUrl}\n\n`;
   }
@@ -339,8 +338,8 @@ async function buildIccTv(): Promise<string> {
   }
 
   if (!m3u.includes("#EXTINF")) {
-    const fallbackLogo = "https://ik.imagekit.io/yjtx9nh9y/IMG_20250207_083415_447.jpg";
-    const fallbackVideoUrl = "https://xoended.vercel.app/xoended.m3u8";
+    const fallbackLogo = "https://ik.imagekit.io/yjtx9nh9y/Black%20White%20Minimal%20Simple%20Modern%20Pixel%20Neon%20%20Modern%20AI%20Logo.png?updatedAt=1780156943081";
+    const fallbackVideoUrl = "https://cartelended.vercel.app/cartelended.m3u8";
     m3u += `#EXTINF:-1 tvg-id="icc-no-live" tvg-logo="${fallbackLogo}" group-title="${boldCategory}" group-logo="${iccGroupLogo}",No Live Matches on ICC TV Right Now\n`;
     m3u += `${fallbackVideoUrl}\n\n`;
   }
@@ -374,8 +373,8 @@ async function buildSonyLiv(): Promise<string> {
   }
 
   if (!m3u.includes("#EXTINF")) {
-    const fallbackLogo = "https://ik.imagekit.io/yjtx9nh9y/IMG_20250207_083415_447.jpg";
-    const fallbackVideoUrl = "https://xoended.vercel.app/xoended.m3u8";
+    const fallbackLogo = "https://ik.imagekit.io/yjtx9nh9y/Black%20White%20Minimal%20Simple%20Modern%20Pixel%20Neon%20%20Modern%20AI%20Logo.png?updatedAt=1780156943081";
+    const fallbackVideoUrl = "https://cartelended.vercel.app/cartelended.m3u8";
     m3u += `#EXTINF:-1 tvg-id="sony-no-live" tvg-logo="${fallbackLogo}" group-title="${categoryName}" group-logo="${categoryLogo}",No Live Matches on SonyLIV Right Now\n`;
     m3u += `${fallbackVideoUrl}\n\n`;
   }
@@ -428,8 +427,8 @@ async function buildCricHD(): Promise<string> {
   }
 
   if (!m3u.includes("#EXTINF")) {
-    const fallbackLogo = "https://ik.imagekit.io/yjtx9nh9y/IMG_20250207_083415_447.jpg";
-    const fallbackVideoUrl = "https://xoended.vercel.app/xoended.m3u8";
+    const fallbackLogo = "https://ik.imagekit.io/yjtx9nh9y/Black%20White%20Minimal%20Simple%20Modern%20Pixel%20Neon%20%20Modern%20AI%20Logo.png?updatedAt=1780156943081";
+    const fallbackVideoUrl = "https://cartelended.vercel.app/cartelended.m3u8";
     m3u += `#EXTINF:-1 tvg-id="crichd-no-live" tvg-logo="${fallbackLogo}" group-title="${categoryName}" group-logo="${categoryLogo}",No Channels on CricHD Right Now\n`;
     m3u += `${fallbackVideoUrl}\n\n`;
   }
@@ -481,8 +480,8 @@ async function buildFifaPlus(): Promise<string> {
   }
 
   if (!m3u.includes("#EXTINF")) {
-    const fallbackLogo = "https://ik.imagekit.io/yjtx9nh9y/IMG_20250207_083415_447.jpg";
-    const fallbackVideoUrl = "https://xoended.vercel.app/xoended.m3u8";
+    const fallbackLogo = "https://ik.imagekit.io/yjtx9nh9y/Black%20White%20Minimal%20Simple%20Modern%20Pixel%20Neon%20%20Modern%20AI%20Logo.png?updatedAt=1780156943081";
+    const fallbackVideoUrl = "https://cartelended.vercel.app/cartelended.m3u8";
     m3u += `#EXTINF:-1 tvg-id="fifa-no-live" tvg-logo="${fallbackLogo}" group-title="${categoryName}" group-logo="${categoryLogo}",No Live Matches on FIFA Plus Right Now\n`;
     m3u += `${fallbackVideoUrl}\n\n`;
   }
@@ -574,8 +573,8 @@ async function buildStarSports(): Promise<string> {
   }
 
   if (!m3u.includes("#EXTINF")) {
-    const fallbackLogo = "https://ik.imagekit.io/yjtx9nh9y/IMG_20250207_083415_447.jpg";
-    const fallbackVideoUrl = "https://xoended.vercel.app/xoended.m3u8";
+    const fallbackLogo = "https://ik.imagekit.io/yjtx9nh9y/Black%20White%20Minimal%20Simple%20Modern%20Pixel%20Neon%20%20Modern%20AI%20Logo.png?updatedAt=1780156943081";
+    const fallbackVideoUrl = "https://cartelended.vercel.app/cartelended.m3u8";
     m3u += `#EXTINF:-1 tvg-id="starsports-no-live" tvg-logo="${fallbackLogo}" group-title="${categoryName}" group-logo="${categoryLogo}",No Star Sports Channels Available Right Now\n`;
     m3u += `${fallbackVideoUrl}\n\n`;
   }
@@ -590,7 +589,7 @@ async function buildSupport(): Promise<string> {
   const categoryName = "𝗦𝗨𝗣𝗣𝗢𝗥𝗧"; 
   const categoryLogo = "https://ik.imagekit.io/yjtx9nh9y/sllmnhx-telegram-6896827.svg?updatedAt=1777824421413";
   const channelName = "@xocietylive";
-  const channelLogo = "https://ik.imagekit.io/yjtx9nh9y/IMG_20250207_083415_447.jpg";
+  const channelLogo = "https://ik.imagekit.io/yjtx9nh9y/Black%20White%20Minimal%20Simple%20Modern%20Pixel%20Neon%20%20Modern%20AI%20Logo.png?updatedAt=1780156943081";
   const streamUrl = "https://xociety-intro.vercel.app/xociety.m3u8";
 
   let m3u = `#EXTINF:-1 tvg-id="support-channel" tvg-logo="${channelLogo}" group-title="${categoryName}" group-logo="${categoryLogo}",${channelName}\n`;
@@ -888,57 +887,13 @@ router.post("/config", express.json(), (req, res) => {
   res.json({ success: true, message: "Configuration adjusted successfully", config });
 });
 
-// Stream health-check and redirect guard
+// Stream redirect guard
 const playHandler = async (req: express.Request, res: express.Response): Promise<any> => {
   const targetUrl = req.query.url as string;
   if (!targetUrl) {
     return res.status(400).send("Missing stream URL");
   }
-
-  const skipCheckKeywords = ["xocietypro", "jiotv", "sony", "snyliv", "star", "fancode", "icc", "xobypass", "dai"];
-  if (skipCheckKeywords.some(keyword => targetUrl.toLowerCase().includes(keyword))) {
-    return res.redirect(302, targetUrl);
-  }
-
-  try {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 4000);
-
-    const headers: Record<string, string> = {
-      "User-Agent": (req.headers["user-agent"] as string) || "ExoPlayer/2.18.1"
-    };
-    if (req.headers["referer"]) headers["Referer"] = req.headers["referer"] as string;
-    if (req.headers["origin"]) headers["Origin"] = req.headers["origin"] as string;
-
-    const checkRes = await fetch(targetUrl, {
-      method: "GET",
-      headers,
-      signal: controller.signal
-    });
-
-    clearTimeout(timeoutId);
-
-    if (checkRes.body) {
-      try {
-        await checkRes.body.cancel();
-      } catch (e) {}
-    }
-
-    if (!checkRes.ok || checkRes.status >= 400) {
-      return res.redirect(302, "https://xofix.vercel.app/xofix.m3u8");
-    }
-
-    const contentType = checkRes.headers.get("content-type") || "";
-    const invalidTypes = ["text/html", "application/json", "text/plain", "application/xml"];
-
-    if (invalidTypes.some(type => contentType.toLowerCase().includes(type))) {
-      return res.redirect(302, "https://xofix.vercel.app/xofix.m3u8");
-    }
-
-    return res.redirect(302, targetUrl);
-  } catch (error) {
-    return res.redirect(302, "https://xofix.vercel.app/xofix.m3u8");
-  }
+  return res.redirect(302, targetUrl);
 };
 
 // Main Playlist Generator Endpoint (compatible with both /api/playlist and original request url)
@@ -965,8 +920,8 @@ const playlistHandler = async (req: express.Request, res: express.Response): Pro
     let combinedStreams = fancodeM3u + iccM3u + sonyM3u + crichdM3u + fifaM3u + starSportsM3u + supportM3u;
 
     if (!combinedStreams.includes("#EXTINF")) {
-      const fallbackVideoUrl = "https://xoended.vercel.app/xoended.m3u8";
-      const fallbackLogo = "https://ik.imagekit.io/yjtx9nh9y/Black%20White%20Minimal%20Simple%20Modern%20Pixel%20Neon%20%20Modern%20AI%20Logo.png";
+      const fallbackVideoUrl = "https://cartelended.vercel.app/cartelended.m3u8";
+      const fallbackLogo = "https://ik.imagekit.io/yjtx9nh9y/Black%20White%20Minimal%20Simple%20Modern%20Pixel%20Neon%20%20Modern%20AI%20Logo.png?updatedAt=1780156943081";
       combinedStreams = `#EXTINF:-1 tvg-id="no-stream" tvg-name="No Live Events" tvg-logo="${fallbackLogo}" group-title="Information",No Live Events Right Now\n${fallbackVideoUrl}\n\n`;
     }
 
@@ -1061,8 +1016,7 @@ const playlistHandler = async (req: express.Request, res: express.Response): Pro
           !tLine.includes("icc") &&
           !tLine.includes("fifa") &&
           !tLine.includes("star") &&
-          !tLine.includes("xofix.vercel.app") && 
-          !tLine.includes("xoended.vercel.app") && 
+          !tLine.includes("cartelended.vercel.app") && 
           !tLine.includes("xociety-intro.vercel.app") && 
           !tLine.includes("xobypass=true") && 
           !tLine.includes(host)) {
