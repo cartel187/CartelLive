@@ -352,9 +352,9 @@ async function buildIccTv(): Promise<string> {
 // ==========================================
 // 3. SONY LIV LOGIC
 // ==========================================
-async function buildSonyLiv(): Promise<string> {
+async function buildSonyLivEvents(): Promise<string> {
   const m3uUrl = "https://raw.githubusercontent.com/doctor-8trange/zyphora/refs/heads/main/data/sony.m3u";
-  const categoryName = "SonyLIV";
+  const categoryName = "SonyLiv Events";
   const categoryLogo = "https://ik.imagekit.io/yjtx9nh9y/sony-liv-logo-hd.png";
   let m3u = "";
 
@@ -371,13 +371,80 @@ async function buildSonyLiv(): Promise<string> {
       m3u = m3u.replace(/group-title="[^"]*"/g, `group-logo="${categoryLogo}" group-title="${categoryName}"`);
     }
   } catch (e) {
-    console.error("SonyLIV Error", e);
+    console.error("SonyLiv Events Error", e);
   }
 
   if (!m3u.includes("#EXTINF")) {
     const fallbackLogo = "https://ik.imagekit.io/yjtx9nh9y/Black%20White%20Minimal%20Simple%20Modern%20Pixel%20Neon%20%20Modern%20AI%20Logo.png?updatedAt=1780156943081";
     const fallbackVideoUrl = "https://cartelended.vercel.app/cartelended.m3u8";
-    m3u += `#EXTINF:-1 tvg-id="sony-no-live" tvg-logo="${fallbackLogo}" group-title="${categoryName}" group-logo="${categoryLogo}",No Live Matches on SonyLIV Right Now\n`;
+    m3u += `#EXTINF:-1 tvg-id="sony-no-live" tvg-logo="${fallbackLogo}" group-title="${categoryName}" group-logo="${categoryLogo}",No Live Matches on SonyLiv Events Right Now\n`;
+    m3u += `${fallbackVideoUrl}\n\n`;
+  }
+
+  return m3u + (!m3u.endsWith("\n\n") ? "\n\n" : "");
+}
+
+async function buildSonyLiv(): Promise<string> {
+  const m3uUrl = "https://raw.githubusercontent.com/cartel187/CartelSony/refs/heads/main/SonyLiv.m3u";
+  const categoryName = "SonyLIV";
+  const categoryLogo = "https://ik.imagekit.io/yjtx9nh9y/sony-liv-logo-hd.png";
+  let m3u = "";
+
+  try {
+    const res = await fetch(`${m3uUrl}?t=${Date.now()}`);
+    if (res.ok) {
+      const text = await res.text();
+      const parsedChannels = parseM3uTextToChannels(text, categoryName, categoryLogo);
+      
+      const filteredChannels = parsedChannels.filter(ch => {
+        const hasTelegramId = (ch.contentId === "telegram");
+        const hasSecretSocietyName = (ch.name && (ch.name.includes("𝐒𝐄𝐂𝐑𝐄𝐓 𝐒𝐎𝐂𝐈𝐄𝐓𝐘") || ch.name.includes("SECRET") || ch.name.includes("@TheCursedCelestiaI")));
+        const hasSecretSocietyUrl = (ch.mpd && (ch.mpd.includes("xociety-intro.vercel.app") || ch.mpd.includes("xociety.m3u8")));
+        return !hasTelegramId && !hasSecretSocietyName && !hasSecretSocietyUrl;
+      });
+
+      let reconstructedM3u = "";
+      for (const channel of filteredChannels) {
+        const { contentId, name, mpd, cookie } = channel;
+        const chLogo = channel.logoUrl || categoryLogo;
+        const groupTitle = categoryName;
+        const groupLogoUrl = categoryLogo;
+        const chUA = channel.userAgent || "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36";
+
+        let kodiPropsBlock = "";
+        if (channel.kodiprops && channel.kodiprops.length > 0) {
+          for (const prop of channel.kodiprops) {
+            kodiPropsBlock += `${prop}\n`;
+          }
+        }
+        let extraOptsBlock = "";
+        if (channel.extraOpts && channel.extraOpts.length > 0) {
+          for (const opt of channel.extraOpts) {
+            extraOptsBlock += `${opt}\n`;
+          }
+        }
+
+        reconstructedM3u += `#EXTINF:-1 tvg-id="${contentId}" tvg-name="${name}" tvg-logo="${chLogo}" group-title="${groupTitle}" group-logo="${groupLogoUrl}", ${name}\n`;
+        if (kodiPropsBlock) reconstructedM3u += kodiPropsBlock;
+        if (extraOptsBlock) reconstructedM3u += extraOptsBlock;
+        if (chUA) {
+          reconstructedM3u += `#EXTVLCOPT:http-user-agent=${chUA}\n`;
+        }
+        if (cookie) {
+          reconstructedM3u += `#EXTVLCOPT:http-cookie=${cookie}\n`;
+        }
+        reconstructedM3u += `${mpd}${channel.userAgent ? '|User-Agent=' + encodeURIComponent(channel.userAgent) : ''}${cookie ? '&Cookie=' + encodeURIComponent(cookie) : ''}\n\n`;
+      }
+      m3u = reconstructedM3u;
+    }
+  } catch (e) {
+    console.error("SonyLIV New Category Error", e);
+  }
+
+  if (!m3u.includes("#EXTINF")) {
+    const fallbackLogo = "https://ik.imagekit.io/yjtx9nh9y/Black%20White%20Minimal%20Simple%20Modern%20Pixel%20Neon%2520%2520Modern%2520AI%2520Logo.png?updatedAt=1780156943081";
+    const fallbackVideoUrl = "https://cartelended.vercel.app/cartelended.m3u8";
+    m3u += `#EXTINF:-1 tvg-id="sony-new-no-live" tvg-logo="${fallbackLogo}" group-title="${categoryName}" group-logo="${categoryLogo}",No Live Matches on SonyLIV Right Now\n`;
     m3u += `${fallbackVideoUrl}\n\n`;
   }
 
@@ -922,10 +989,11 @@ async function fetchJioData(force = false) {
   
   console.log("[Source] Merging multifeed scraper streams...");
   try {
-    const [fcM3u, iccM3u, sonyM3u, cricM3u, fifaM3u, starM3u, supportM3u] = await Promise.all([
+    const [fcM3u, iccM3u, sonyM3u, sonyEventsM3u, cricM3u, fifaM3u, starM3u, supportM3u] = await Promise.all([
       buildFanCode(),
       buildIccTv(),
       buildSonyLiv(),
+      buildSonyLivEvents(),
       buildCricHD(),
       buildFifaPlus(),
       buildStarSports(),
@@ -935,6 +1003,7 @@ async function fetchJioData(force = false) {
     const fcChannels = parseM3uTextToChannels(fcM3u, "𝗙𝗔𝗡𝗖𝗢𝗗𝗘", "https://ik.imagekit.io/yjtx9nh9y/vecteezy_fancode-app-icon-on-transparent-background_69146538.png");
     const iccChannels = parseM3uTextToChannels(iccM3u, "𝗜𝗖𝗖 𝗧𝗩", "https://ik.imagekit.io/yjtx9nh9y/62823e9932b32411608aa856.png");
     const sonyChannels = parseM3uTextToChannels(sonyM3u, "SonyLIV", "https://ik.imagekit.io/yjtx9nh9y/sony-liv-logo-hd.png");
+    const sonyEventsChannels = parseM3uTextToChannels(sonyEventsM3u, "SonyLiv Events", "https://ik.imagekit.io/yjtx9nh9y/sony-liv-logo-hd.png");
     const cricChannels = parseM3uTextToChannels(cricM3u, "CricHD", "https://ik.imagekit.io/yjtx9nh9y/images%20(2).jpeg");
     const fifaChannels = parseM3uTextToChannels(fifaM3u, "FIFA Plus", "https://ik.imagekit.io/yjtx9nh9y/images.png");
     const starSportsChannels = parseM3uTextToChannels(starM3u, "Star Sports", "https://ik.imagekit.io/yjtx9nh9y/947787.jpg");
@@ -962,6 +1031,7 @@ async function fetchJioData(force = false) {
       ...fcChannels,
       ...iccChannels,
       ...sonyChannels,
+      ...sonyEventsChannels,
       ...cricChannels,
       ...fifaChannels,
       ...starSportsChannels,
@@ -1057,10 +1127,11 @@ const playlistHandler = async (req: express.Request, res: express.Response): Pro
     }
     
     // 1. Gather all Scraper M3U blocks
-    const [fancodeM3u, iccM3u, sonyM3u, crichdM3u, fifaM3u, starSportsM3u, supportM3u] = await Promise.all([
+    const [fancodeM3u, iccM3u, sonyM3u, sonyEventsM3u, crichdM3u, fifaM3u, starSportsM3u, supportM3u] = await Promise.all([
       buildFanCode(),
       buildIccTv(),
       buildSonyLiv(),
+      buildSonyLivEvents(),
       buildCricHD(),
       buildFifaPlus(),
       buildStarSports(),
@@ -1068,7 +1139,7 @@ const playlistHandler = async (req: express.Request, res: express.Response): Pro
     ]);
 
     const customM3u = await buildCustomPlaylistsM3u(outputFormat);
-    let combinedStreams = fancodeM3u + iccM3u + sonyM3u + crichdM3u + fifaM3u + starSportsM3u + supportM3u + customM3u;
+    let combinedStreams = fancodeM3u + iccM3u + sonyM3u + sonyEventsM3u + crichdM3u + fifaM3u + starSportsM3u + supportM3u + customM3u;
 
     if (!combinedStreams.includes("#EXTINF")) {
       const fallbackVideoUrl = "https://cartelended.vercel.app/cartelended.m3u8";
