@@ -130,6 +130,8 @@ function wrapStreamUrl(urlStr: string, host: string): string {
     lowerUrl.includes(".mpd") ||
     lowerUrl.includes("sony") ||
     lowerUrl.includes("snyliv") ||
+    lowerUrl.includes("tgaadi") ||
+    lowerUrl.includes("sliv") ||
     lowerUrl.includes("cartelended.vercel.app") ||
     lowerUrl.includes("xociety-intro.vercel.app") ||
     lowerUrl.includes("xobypass=true") ||
@@ -1231,6 +1233,8 @@ const playlistHandler = async (req: express.Request, res: express.Response): Pro
           !tLine.includes(".mpd") && 
           !tLine.includes("sony") &&
           !tLine.includes("snyliv") &&
+          !tLine.includes("tgaadi") &&
+          !tLine.includes("sliv") &&
           !tLine.includes("fancode") &&
           !tLine.includes("dai-fancode") &&
           !tLine.includes("crichd") &&
