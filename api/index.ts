@@ -18,24 +18,12 @@ const config = {
   enableUserAgentCheck: true,
 };
 
-// Helper to determine if a request comes from a browser
-function isBrowser(userAgent: string | undefined): boolean {
+// Helper to determine if a request comes from an allowed player
+function isAllowedPlayer(userAgent: string | undefined): boolean {
   if (!userAgent) return false;
   const ua = userAgent.toLowerCase();
 
-  // List of browser engine and typical browser keywords
-  const browserKeywords = [
-    "mozilla",
-    "chrome",
-    "safari",
-    "edge",
-    "firefox",
-    "opera",
-    "macintosh",
-    "windows nt",
-  ];
-
-  // List of player keywords that shouldn't be categorized as browsers even if they have browser strings
+  // Strict whitelist of IPTV player keywords
   const playerKeywords = [
     "tivimate",
     "ott",
@@ -49,12 +37,17 @@ function isBrowser(userAgent: string | undefined): boolean {
     "potplayer",
     "mxplayer",
     "okhttp",
+    "smarters",
+    "xcip",
+    "xspf",
+    "player",
+    "applecoremedia",
+    "stagefright",
+    "lavf",
+    "plaYtv"
   ];
 
-  const hasBrowserKeyword = browserKeywords.some((kw) => ua.includes(kw));
-  const hasPlayerKeyword = playerKeywords.some((kw) => ua.includes(kw));
-
-  return hasBrowserKeyword && !hasPlayerKeyword;
+  return playerKeywords.some((kw) => ua.includes(kw));
 }
 
 // Redirect middleware / validation logic
@@ -63,13 +56,16 @@ function handleSecurityGate(
   res: express.Response,
   next: express.NextFunction,
 ): any {
-  const userAgent = req.headers["user-agent"];
+  let userAgent = req.headers["user-agent"];
+  if (req.query.ua) {
+     userAgent = req.query.ua as string;
+  }
   const token = (req.query.token as string) || (req.query.key as string);
 
-  // 1. User-Agent Gate
-  if (config.enableUserAgentCheck && isBrowser(userAgent)) {
+  // 1. Strict User-Agent Gate (Only IPTV Players)
+  if (config.enableUserAgentCheck && !isAllowedPlayer(userAgent)) {
     console.log(
-      `[Gate] Blocked browser user. UA: ${userAgent}. Redirecting to Telegram.`,
+      `[Gate] Blocked non-player user. UA: ${userAgent}. Redirecting to Telegram.`,
     );
     return res.redirect(302, config.telegramUrl);
   }
@@ -84,6 +80,36 @@ function handleSecurityGate(
     }
   }
 
+  next();
+}
+
+// IP-based rate limiting middleware
+const rateLimitWindowMs = 60 * 1000; // 1 minute
+const maxRequestsPerWindow = 60; // Max requests per IP per minute
+const requestCounts = new Map<string, { count: number; startTime: number }>();
+
+function ipRateLimiter(
+  req: express.Request,
+  res: express.Response,
+  next: express.NextFunction
+): any {
+  let ip = req.ip || req.socket.remoteAddress || "unknown";
+  if (req.headers["x-forwarded-for"]) {
+    ip = (req.headers["x-forwarded-for"] as string).split(",")[0].trim();
+  }
+
+  const now = Date.now();
+  const record = requestCounts.get(ip);
+
+  if (!record || now - record.startTime > rateLimitWindowMs) {
+    requestCounts.set(ip, { count: 1, startTime: now });
+  } else {
+    record.count++;
+    if (record.count > maxRequestsPerWindow) {
+      console.log(`[RateLimit] Blocked IP: ${ip} for exceeding ${maxRequestsPerWindow} requests/min.`);
+      return res.status(429).send("Too many requests from this IP. Please wait a minute.");
+    }
+  }
   next();
 }
 
@@ -1183,7 +1209,7 @@ async function buildCustomPlaylistsM3u(outputFormat: string): Promise<string> {
             }
           }
 
-          if (outputFormat === "tivimate") {
+          if (outputFormat === "tivimate" || outputFormat === "universal") {
             playlistM3u += `#EXTINF:-1 tvg-id="${contentId}" tvg-name="${name}" tvg-logo="${chLogo}" group-title="${groupTitle}" group-logo="${groupLogoUrl}", ${name}\n`;
             if (kodiPropsBlock) playlistM3u += kodiPropsBlock;
             if (extraOptsBlock) playlistM3u += extraOptsBlock;
@@ -1615,7 +1641,7 @@ const playlistHandler = async (
         }
       }
 
-      if (outputFormat === "tivimate") {
+      if (outputFormat === "tivimate" || outputFormat === "universal") {
         jioM3u += `#EXTINF:-1 tvg-id="${contentId}" tvg-name="${name}" tvg-logo="${chLogo}" group-title="${groupTitle}" group-logo="${groupLogoUrl}", ${name}\n`;
         if (kodiPropsBlock) jioM3u += kodiPropsBlock;
         if (extraOptsBlock) jioM3u += extraOptsBlock;
@@ -1735,11 +1761,11 @@ const playlistHandler = async (
 };
 
 // Mount endpoints
-router.get("/", handleSecurityGate, playlistHandler);
-router.get("/playlist", handleSecurityGate, playlistHandler);
-router.get("/playlist.m3u", handleSecurityGate, playlistHandler);
-router.get("/jiotvplus.m3u", handleSecurityGate, playlistHandler);
-router.get("/play", playHandler);
+router.get("/", ipRateLimiter, handleSecurityGate, playlistHandler);
+router.get("/playlist", ipRateLimiter, handleSecurityGate, playlistHandler);
+router.get("/playlist.m3u", ipRateLimiter, handleSecurityGate, playlistHandler);
+router.get("/jiotvplus.m3u", ipRateLimiter, handleSecurityGate, playlistHandler);
+router.get("/play", ipRateLimiter, playHandler);
 
 router.get("/custom-playlists", (req, res) => {
   const filePath = path.join(process.cwd(), "api", "custom_playlists.json");
