@@ -204,7 +204,7 @@ function wrapStreamUrl(urlStr: string, host: string): string {
     lowerUrl.includes("tgaadi") ||
     lowerUrl.includes("sliv") ||
     lowerUrl.includes("cartelended.vercel.app") ||
-    lowerUrl.includes("xociety-intro.vercel.app") ||
+    lowerUrl.includes("cartelintro.vercel.app") ||
     lowerUrl.includes("xobypass=true") ||
     urlStr.includes(host)
   ) {
@@ -532,8 +532,8 @@ async function buildSonyLiv(): Promise<string> {
             ch.name.includes("@TheCursedCelestiaI"));
         const hasSecretSocietyUrl =
           ch.mpd &&
-          (ch.mpd.includes("xociety-intro.vercel.app") ||
-            ch.mpd.includes("xociety.m3u8"));
+          (ch.mpd.includes("cartelintro.vercel.app") ||
+            ch.mpd.includes("cartelintro.m3u8"));
         return !hasTelegramId && !hasSecretSocietyName && !hasSecretSocietyUrl;
       });
 
@@ -833,10 +833,10 @@ async function buildSupport(): Promise<string> {
   const categoryName = "𝗦𝗨𝗣𝗣𝗢𝗥𝗧";
   const categoryLogo =
     "https://ik.imagekit.io/yjtx9nh9y/sllmnhx-telegram-6896827.svg?updatedAt=1777824421413";
-  const channelName = "@xocietylive";
+  const channelName = "@cartel187";
   const channelLogo =
     "https://ik.imagekit.io/yjtx9nh9y/Black%20White%20Minimal%20Simple%20Modern%20Pixel%20Neon%20%20Modern%20AI%20Logo.png?updatedAt=1780156943081";
-  const streamUrl = "https://xociety-intro.vercel.app/xociety.m3u8";
+  const streamUrl = "https://cartelintro.vercel.app/cartelintro.m3u8";
 
   let m3u = `#EXTINF:-1 tvg-id="support-channel" tvg-logo="${channelLogo}" group-title="${categoryName}" group-logo="${categoryLogo}",${channelName}\n`;
   m3u += `${streamUrl}\n\n`;
@@ -1641,8 +1641,8 @@ const playlistHandler = async (
     }
 
     // 3. Construct total master M3U
-    const author = "𝐒𝐄𝐂𝐑𝐄𝐓 𝐒𝐎𝐂𝐈𝐄𝐓𝐘";
-    const telegram = "https://t.me/xocietylive";
+    const author = "CARTEL 187";
+    const telegram = "https://t.me/cartel187";
     const dateNow = new Date()
       .toLocaleString("en-GB", {
         day: "2-digit",
@@ -1696,7 +1696,7 @@ const playlistHandler = async (
           !tLine.includes("star") &&
           !tLine.includes("cartel187") &&
           !tLine.includes("cartelended.vercel.app") &&
-          !tLine.includes("xociety-intro.vercel.app") &&
+          !tLine.includes("cartelintro.vercel.app") &&
           !tLine.includes("xobypass=true") &&
           !tLine.includes("workers.dev") &&
           !tLine.includes("lrl45") &&
