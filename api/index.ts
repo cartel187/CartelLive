@@ -720,12 +720,11 @@ async function buildExtraPlaylists(): Promise<string> {
         const groupLower = groupTitle.toLowerCase();
         let groupLogo = "";
 
-        // Brandings & Renaming translation matching user instructions:
+        // Apply branding & logos
         if (groupLower.includes("jio cinema")) {
           groupTitle = "Jio Cinema";
           groupLogo = "https://ik.imagekit.io/yjtx9nh9y/Jiocinema.png";
         } else if (groupLower.includes("jio ⭕")) {
-          // Replace both "JIO ⭕|" and "JIO ⭕" with "JioS3 "
           groupTitle = groupTitle.replace(/JIO\s*⭕\s*\|?/gi, "JioS3 ").replace(/\s+/g, " ").trim();
           groupLogo = "https://ik.imagekit.io/yjtx9nh9y/Jio-TV-Logo.png?updatedAt=1777823901229";
         } else if (groupLower.includes("sonyliv channel")) {
@@ -736,22 +735,18 @@ async function buildExtraPlaylists(): Promise<string> {
           groupLogo = "https://ik.imagekit.io/yjtx9nh9y/vecteezy_sun-nxt-transparent-icon_51336401.png";
         }
 
-        // Apply xobypass=true to mpd so it bypasses the URL wrapper and streams don't break
-        let finalMpd = mpd;
-        if (finalMpd.startsWith("http")) {
-          let urlPart = finalMpd;
-          let modifierPart = "";
-          if (finalMpd.includes("|")) {
-            const parts = finalMpd.split("|");
-            urlPart = parts[0];
-            modifierPart = "|" + parts.slice(1).join("|");
-          }
-          const separator = urlPart.includes("?") ? "&" : "?";
-          urlPart += `${separator}xobypass=true`;
-          finalMpd = urlPart + modifierPart;
-        }
-
+        // Header merging logic: 
+        // 1. Extract what's already in the pipes
+        // 2. Add extracted headers if they are missing
         const chUA = channel.userAgent || "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36";
+        let streamLine = mpd;
+
+        if (!streamLine.includes("|User-Agent=")) {
+           streamLine += `|User-Agent=${encodeURIComponent(chUA)}`;
+        }
+        if (cookie && !streamLine.includes("|Cookie=")) {
+           streamLine += `|Cookie=${encodeURIComponent(cookie)}`;
+        }
 
         let kodiPropsBlock = "";
         if (channel.kodiprops && channel.kodiprops.length > 0) {
@@ -766,23 +761,10 @@ async function buildExtraPlaylists(): Promise<string> {
           }
         }
 
-        reconstructedM3u += `#EXTINF:-1 tvg-id="${contentId}" tvg-name="${name}" tvg-logo="${originalLogo}" group-title="${groupTitle}" group-logo="${groupLogo}", ${name}\n`;
+        // User requested ONLY applying logo to category, not the streams for this source
+        reconstructedM3u += `#EXTINF:-1 tvg-id="${contentId}" tvg-name="${name}" tvg-logo="" group-title="${groupTitle}" group-logo="${groupLogo}", ${name}\n`;
         if (kodiPropsBlock) reconstructedM3u += kodiPropsBlock;
         if (extraOptsBlock) reconstructedM3u += extraOptsBlock;
-        if (chUA && !finalMpd.includes("|User-Agent=")) {
-          reconstructedM3u += `#EXTVLCOPT:http-user-agent=${chUA}\n`;
-        }
-        if (cookie && !finalMpd.includes("|Cookie=")) {
-          reconstructedM3u += `#EXTVLCOPT:http-cookie=${cookie}\n`;
-        }
-        
-        // Use the original mpd line if it already has headers, or construct it safely
-        let streamLine = finalMpd;
-        if (!streamLine.includes("|")) {
-          if (chUA) streamLine += `|User-Agent=${chUA}`;
-          if (cookie) streamLine += `|Cookie=${cookie}`;
-        }
-        
         reconstructedM3u += `${streamLine}\n\n`;
       }
       m3u = reconstructedM3u;
