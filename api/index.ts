@@ -875,7 +875,7 @@ async function buildSupport(): Promise<string> {
 // ==========================================
 async function buildExtraPlaylists(): Promise<string> {
   const m3uUrl =
-    "https://raw.githubusercontent.com/cartel187/xovt/refs/heads/main/playlist.m3u";
+    "https://raw.githubusercontent.com/cartel187/Cartelfetch/refs/heads/main/playlist.m3u";
   let m3u = "";
 
   try {
