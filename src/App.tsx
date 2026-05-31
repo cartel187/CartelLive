@@ -59,7 +59,7 @@ export default function App() {
 
   // Filter and Search states
   const [searchTerm, setSearchTerm] = useState("");
-  const [selectedFormat, setSelectedFormat] = useState<"tivimate" | "standard-opt" | "clean">("tivimate");
+  const [selectedFormat, setSelectedFormat] = useState<"tivimate" | "standard-opt" | "clean" | "universal">("universal");
 
   // Simulation state
   const [simUserAgent, setSimUserAgent] = useState("VLC/3.0.18 LibVLC/3.0.18");
@@ -584,11 +584,11 @@ Load your personalized URL in any player (TiviMate, Kodi, Apple TV, VLC):
       {/* Header Bar */}
       <header id="app_header" className="sticky top-0 z-50 backdrop-blur-md bg-[#07090e]/85 border-b border-slate-900/60 px-6 py-4 flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <div className="bg-gradient-to-tr from-purple-600 to-indigo-600 p-2.5 rounded-xl shadow-lg shadow-purple-900/30 ring-1 ring-purple-500/20">
-            <Shield className="w-5 h-5 text-white animate-pulse" />
+          <div className="bg-transparent rounded-xl overflow-hidden shadow-lg shadow-purple-900/10 ring-1 ring-purple-500/20">
+            <img src="https://ik.imagekit.io/yjtx9nh9y/Black%20White%20Minimal%20Simple%20Modern%20Pixel%20Neon%20%20Modern%20AI%20Logo.png?updatedAt=1780156943081" alt="Logo" className="w-8 h-8 object-cover" />
           </div>
           <div>
-            <h1 className="text-lg font-bold tracking-tight bg-gradient-to-r from-white via-slate-200 to-slate-400 bg-clip-text text-transparent">IPTV Playlist Guard</h1>
+            <h1 className="text-lg font-bold tracking-tight bg-gradient-to-r from-white via-slate-200 to-slate-400 bg-clip-text text-transparent">ＣΛＲＴΞＬ</h1>
             <p className="text-[10px] font-mono tracking-wider text-purple-400 font-bold">BY CARTEL DEV LABS</p>
           </div>
         </div>
@@ -822,6 +822,7 @@ Load your personalized URL in any player (TiviMate, Kodi, Apple TV, VLC):
                     onChange={(e) => setSelectedFormat(e.target.value as any)}
                     className="bg-[#08090f] border border-slate-900 rounded-lg px-2 py-1 text-[10px] font-semibold text-slate-300 outline-none hover:border-slate-800"
                   >
+                    <option value="universal">Format: Universal</option>
                     <option value="tivimate">Format: TiviMate Enhanced</option>
                     <option value="standard-opt">Format: VLC Standard</option>
                     <option value="clean">Format: Raw Stream Link</option>
