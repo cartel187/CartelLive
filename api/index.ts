@@ -115,10 +115,10 @@ function cleanGroupTitle(group: string, isOriginalJio: boolean): string {
 // Resolve category logos dynamically matching user specifications
 function getGroupLogo(groupName: string): string {
   const g = groupName.toLowerCase();
-  if (g === "jio cinema") return "https://ik.imagekit.io/yjtx9nh9y/Jiocinema.png";
-  if (g === "sonyliv s2") return "https://ik.imagekit.io/yjtx9nh9y/sony-liv-logo-hd.png?updatedAt=1777812797381";
-  if (g === "sunnxt") return "https://ik.imagekit.io/yjtx9nh9y/vecteezy_sun-nxt-transparent-icon_51336401.png";
-  if (g.startsWith("jios3")) return "https://ik.imagekit.io/yjtx9nh9y/Jio-TV-Logo.png?updatedAt=1777823901229";
+  if (g.includes("jio cinema")) return "https://ik.imagekit.io/yjtx9nh9y/Jiocinema.png";
+  if (g.includes("sonyliv s2")) return "https://ik.imagekit.io/yjtx9nh9y/sony-liv-logo-hd.png?updatedAt=1777812797381";
+  if (g.includes("sunnxt")) return "https://ik.imagekit.io/yjtx9nh9y/vecteezy_sun-nxt-transparent-icon_51336401.png";
+  if (g.includes("jios3")) return "https://ik.imagekit.io/yjtx9nh9y/Jio-TV-Logo.png?updatedAt=1777823901229";
 
   if (g.includes("fancode") || g.includes("𝗳𝗮𝗻𝗰𝗼𝗱𝗲")) return "https://ik.imagekit.io/yjtx9nh9y/vecteezy_fancode-app-icon-on-transparent-background_69146538.png";
   if (g.includes("icc") || g.includes("𝗶🇨🇴") || g.includes("𝗶𝗰🇨🇵") || g.includes("𝗶𝗰𝗰") || g.includes("𝗶𝗰𝗰 𝘁𝘃") || g.includes("icc tv")) return "https://ik.imagekit.io/yjtx9nh9y/62823e9932b32411608aa856.png";
@@ -715,28 +715,24 @@ async function buildExtraPlaylists(): Promise<string> {
 
       let reconstructedM3u = "";
       for (const channel of filteredChannels) {
-        let { contentId, name, mpd, cookie, groupTitle } = channel;
-        const originalLogo = channel.logoUrl || "";
+        let { contentId, name, mpd, cookie, groupTitle, logoUrl } = channel;
         const groupLower = groupTitle.toLowerCase();
-        let groupLogo = "";
+        let groupLogo = getGroupLogo(groupTitle);
 
-        // Apply branding & logos
-        if (groupLower.includes("jio cinema")) {
-          groupTitle = "Jio Cinema";
-          groupLogo = "https://ik.imagekit.io/yjtx9nh9y/Jiocinema.png";
-        } else if (groupLower.includes("jio ⭕")) {
+        // Branding re-mapping only where explicitly requested or needed for renaming
+        if (groupLower.includes("jio ⭕")) {
           groupTitle = groupTitle.replace(/JIO\s*⭕\s*\|?/gi, "JioS3 ").replace(/\s+/g, " ").trim();
           groupLogo = "https://ik.imagekit.io/yjtx9nh9y/Jio-TV-Logo.png?updatedAt=1777823901229";
+        } else if (groupLower.includes("jio cinema")) {
+          groupLogo = "https://ik.imagekit.io/yjtx9nh9y/Jiocinema.png";
         } else if (groupLower.includes("sonyliv channel")) {
-          groupTitle = "SonyLIV S2";
           groupLogo = "https://ik.imagekit.io/yjtx9nh9y/sony-liv-logo-hd.png?updatedAt=1777812797381";
         } else if (groupLower.includes("sunnxt")) {
-          groupTitle = "SunNxt";
           groupLogo = "https://ik.imagekit.io/yjtx9nh9y/vecteezy_sun-nxt-transparent-icon_51336401.png";
         }
 
         const chUA = channel.userAgent || "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36";
-        const streamLine = mpd;
+        let finalStreamLine = mpd;
 
         let kodiPropsBlock = "";
         if (channel.kodiprops && channel.kodiprops.length > 0) {
@@ -751,17 +747,18 @@ async function buildExtraPlaylists(): Promise<string> {
           }
         }
 
-        // User requested ONLY applying logo to category, not the streams for this source
-        reconstructedM3u += `#EXTINF:-1 tvg-id="${contentId}" tvg-name="${name}" tvg-logo="" group-title="${groupTitle}" group-logo="${groupLogo}", ${name}\n`;
+        reconstructedM3u += `#EXTINF:-1 tvg-id="${contentId}" tvg-name="${name}" tvg-logo="${logoUrl}" group-title="${groupTitle}" group-logo="${groupLogo}", ${name}\n`;
         if (kodiPropsBlock) reconstructedM3u += kodiPropsBlock;
         if (extraOptsBlock) reconstructedM3u += extraOptsBlock;
-        if (chUA) {
+        
+        const lowerStream = finalStreamLine.toLowerCase();
+        if (chUA && !lowerStream.includes("|user-agent=")) {
           reconstructedM3u += `#EXTVLCOPT:http-user-agent=${chUA}\n`;
         }
-        if (cookie) {
+        if (cookie && !lowerStream.includes("|cookie=")) {
           reconstructedM3u += `#EXTVLCOPT:http-cookie=${cookie}\n`;
         }
-        reconstructedM3u += `${streamLine}\n\n`;
+        reconstructedM3u += `${finalStreamLine}\n\n`;
       }
       m3u = reconstructedM3u;
     }
