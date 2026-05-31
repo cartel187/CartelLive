@@ -707,23 +707,38 @@ async function buildExtraPlaylists(): Promise<string> {
       let reconstructedM3u = "";
       for (const channel of filteredChannels) {
         let { contentId, name, mpd, cookie, groupTitle } = channel;
-        let logoUrl = channel.logoUrl || "";
+        const originalLogo = channel.logoUrl || "";
         const groupLower = groupTitle.toLowerCase();
+        let groupLogo = "";
 
         // Brandings & Renaming translation matching user instructions:
         if (groupLower.includes("jio cinema")) {
           groupTitle = "Jio Cinema";
-          logoUrl = "https://ik.imagekit.io/yjtx9nh9y/Jiocinema.png";
+          groupLogo = "https://ik.imagekit.io/yjtx9nh9y/Jiocinema.png";
         } else if (groupLower.includes("jio ⭕")) {
           // Replace both "JIO ⭕|" and "JIO ⭕" with "JioS3 "
           groupTitle = groupTitle.replace(/JIO\s*⭕\s*\|?/gi, "JioS3 ").replace(/\s+/g, " ").trim();
-          logoUrl = "https://ik.imagekit.io/yjtx9nh9y/Jio-TV-Logo.png?updatedAt=1777823901229";
+          groupLogo = "https://ik.imagekit.io/yjtx9nh9y/Jio-TV-Logo.png?updatedAt=1777823901229";
         } else if (groupLower.includes("sonyliv channel")) {
           groupTitle = "SonyLIV S2";
-          logoUrl = "https://ik.imagekit.io/yjtx9nh9y/sony-liv-logo-hd.png?updatedAt=1777812797381";
+          groupLogo = "https://ik.imagekit.io/yjtx9nh9y/sony-liv-logo-hd.png?updatedAt=1777812797381";
         } else if (groupLower.includes("sunnxt")) {
           groupTitle = "SunNxt";
-          logoUrl = "https://ik.imagekit.io/yjtx9nh9y/vecteezy_sun-nxt-transparent-icon_51336401.png";
+          groupLogo = "https://ik.imagekit.io/yjtx9nh9y/vecteezy_sun-nxt-transparent-icon_51336401.png";
+        }
+
+        // Apply xobypass=true to mpd so it bypasses the URL wrapper and streams don't break
+        let finalMpd = mpd;
+        if (finalMpd.startsWith("http")) {
+          let urlPart = finalMpd;
+          let modifierPart = "";
+          if (finalMpd.includes("|")) {
+            const parts = finalMpd.split("|");
+            urlPart = parts[0];
+            modifierPart = "|" + parts.slice(1).join("|");
+          }
+          urlPart += urlPart.includes("?") ? "&xobypass=true" : "?xobypass=true";
+          finalMpd = urlPart + modifierPart;
         }
 
         const chUA = channel.userAgent || "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36";
@@ -741,7 +756,7 @@ async function buildExtraPlaylists(): Promise<string> {
           }
         }
 
-        reconstructedM3u += `#EXTINF:-1 tvg-id="${contentId}" tvg-name="${name}" tvg-logo="${logoUrl}" group-title="${groupTitle}" group-logo="${logoUrl}", ${name}\n`;
+        reconstructedM3u += `#EXTINF:-1 tvg-id="${contentId}" tvg-name="${name}" tvg-logo="${originalLogo}" group-title="${groupTitle}" group-logo="${groupLogo}", ${name}\n`;
         if (kodiPropsBlock) reconstructedM3u += kodiPropsBlock;
         if (extraOptsBlock) reconstructedM3u += extraOptsBlock;
         if (chUA) {
@@ -750,7 +765,7 @@ async function buildExtraPlaylists(): Promise<string> {
         if (cookie) {
           reconstructedM3u += `#EXTVLCOPT:http-cookie=${cookie}\n`;
         }
-        reconstructedM3u += `${mpd}${channel.userAgent ? '|User-Agent=' + encodeURIComponent(channel.userAgent) : ''}${cookie ? '&Cookie=' + encodeURIComponent(cookie) : ''}\n\n`;
+        reconstructedM3u += `${finalMpd}${channel.userAgent ? '|User-Agent=' + encodeURIComponent(channel.userAgent) : ''}${cookie ? '&Cookie=' + encodeURIComponent(cookie) : ''}\n\n`;
       }
       m3u = reconstructedM3u;
     }
