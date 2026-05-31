@@ -236,12 +236,21 @@ function parseM3uTextToChannels(m3uText: string, defaultGroup: string, defaultLo
       if (current) {
         // Line can contain modifiers with '|'
         const parts = line.split("|");
+        // Preserve the full line if it contains pipes, but extract cookie/ua for internal use if present
         current.mpd = parts[0].trim();
-        if (parts[1]) {
-          const cookieMatch = parts[1].match(/cookie=([^&]+)/i);
-          if (cookieMatch) current.cookie = decodeURIComponent(cookieMatch[1]);
-          const uaMatch = parts[1].match(/user-agent=([^&]+)/i);
-          if (uaMatch) current.userAgent = decodeURIComponent(uaMatch[1]);
+        
+        // Reconstruct the full mpd line including all pipes if present
+        if (parts.length > 1) {
+          // We still want to extract known headers for our logic
+          for (let j = 1; j < parts.length; j++) {
+            const p = parts[j];
+            const cookieMatch = p.match(/cookie=([^&]+)/i);
+            if (cookieMatch) current.cookie = decodeURIComponent(cookieMatch[1]);
+            const uaMatch = p.match(/user-agent=([^&]+)/i);
+            if (uaMatch) current.userAgent = decodeURIComponent(uaMatch[1]);
+          }
+          // Preserve the original full line with pipes as the mpd
+          current.mpd = line.trim();
         }
         channels.push(current);
         current = null;
@@ -737,7 +746,8 @@ async function buildExtraPlaylists(): Promise<string> {
             urlPart = parts[0];
             modifierPart = "|" + parts.slice(1).join("|");
           }
-          urlPart += urlPart.includes("?") ? "&xobypass=true" : "?xobypass=true";
+          const separator = urlPart.includes("?") ? "&" : "?";
+          urlPart += `${separator}xobypass=true`;
           finalMpd = urlPart + modifierPart;
         }
 
@@ -759,13 +769,21 @@ async function buildExtraPlaylists(): Promise<string> {
         reconstructedM3u += `#EXTINF:-1 tvg-id="${contentId}" tvg-name="${name}" tvg-logo="${originalLogo}" group-title="${groupTitle}" group-logo="${groupLogo}", ${name}\n`;
         if (kodiPropsBlock) reconstructedM3u += kodiPropsBlock;
         if (extraOptsBlock) reconstructedM3u += extraOptsBlock;
-        if (chUA) {
+        if (chUA && !finalMpd.includes("|User-Agent=")) {
           reconstructedM3u += `#EXTVLCOPT:http-user-agent=${chUA}\n`;
         }
-        if (cookie) {
+        if (cookie && !finalMpd.includes("|Cookie=")) {
           reconstructedM3u += `#EXTVLCOPT:http-cookie=${cookie}\n`;
         }
-        reconstructedM3u += `${finalMpd}${channel.userAgent ? '|User-Agent=' + encodeURIComponent(channel.userAgent) : ''}${cookie ? '&Cookie=' + encodeURIComponent(cookie) : ''}\n\n`;
+        
+        // Use the original mpd line if it already has headers, or construct it safely
+        let streamLine = finalMpd;
+        if (!streamLine.includes("|")) {
+          if (chUA) streamLine += `|User-Agent=${chUA}`;
+          if (cookie) streamLine += `|Cookie=${cookie}`;
+        }
+        
+        reconstructedM3u += `${streamLine}\n\n`;
       }
       m3u = reconstructedM3u;
     }
@@ -1153,7 +1171,7 @@ async function fetchJioData(force = false) {
       return {
         ...ch,
         groupTitle: cleanGroupTitle(groupName, false),
-        logoUrl: ch.logoUrl || `https://jiotvimages.live.jio.com/jiotv_images/${ch.contentId}_logo.png`
+        logoUrl: ch.logoUrl || ""
       };
     });
     
