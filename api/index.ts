@@ -728,6 +728,20 @@ async function buildExtraPlaylists(): Promise<string> {
         const chUA = channel.userAgent || "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36";
         let finalStreamLine = mpd;
 
+        // Apply xobypass=true to jio streams so they bypass the wrapper and don't break
+        if (groupLower.includes("jio ⭕") && finalStreamLine.startsWith("http")) {
+          let urlPart = finalStreamLine;
+          let modifierPart = "";
+          if (finalStreamLine.includes("|")) {
+            const parts = finalStreamLine.split("|");
+            urlPart = parts[0];
+            modifierPart = "|" + parts.slice(1).join("|");
+          }
+          const separator = urlPart.includes("?") ? "&" : "?";
+          urlPart += `${separator}xobypass=true`;
+          finalStreamLine = urlPart + modifierPart;
+        }
+
         let kodiPropsBlock = "";
         if (channel.kodiprops && channel.kodiprops.length > 0) {
           for (const prop of channel.kodiprops) {
