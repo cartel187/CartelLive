@@ -86,8 +86,12 @@ function cleanGroupTitle(group: string, isOriginalJio: boolean): string {
   let g = group.trim();
   const lower = g.toLowerCase();
   
+  if (lower === "jio cinema" || lower === "sonyliv s2" || lower === "sunnxt" || lower.startsWith("jios3")) {
+    return g;
+  }
+  
   if (lower.includes("fancode") || lower.includes("𝗳𝗮𝗻𝗰𝗼𝗱𝗲")) return "𝗙𝗔𝗡𝗖𝗢𝗗𝗘";
-  if (lower.includes("icc") || lower.includes("𝗶🇨🇴") || lower.includes("𝗶𝗰🇨🇵") || lower.includes("𝗶𝗰𝗰") || lower.includes("𝗶𝗰𝗰 𝘁𝘃") || lower.includes("icc tv")) return "𝗜𝗖𝗖 𝗧𝗩";
+  if (lower.includes("icc") || lower.includes("𝗶🇨🇴") || lower.includes("𝗶𝗰🇨🇵") || lower.includes("𝗶𝗰𝗰") || lower.includes("𝗶𝗰𝗰 𝘁𝘃") || lower.includes("icc tv")) return "𝗜🇨🇨 𝗧𝗩";
   if (lower.includes("sony") || lower.includes("snyliv") || lower.includes("sonyliv")) return "SonyLIV";
   if (lower.includes("crichd") || lower.includes("crichd")) return "CricHD";
   if (lower.includes("fifa")) return "FIFA Plus";
@@ -111,6 +115,11 @@ function cleanGroupTitle(group: string, isOriginalJio: boolean): string {
 // Resolve category logos dynamically matching user specifications
 function getGroupLogo(groupName: string): string {
   const g = groupName.toLowerCase();
+  if (g === "jio cinema") return "https://ik.imagekit.io/yjtx9nh9y/Jiocinema.png";
+  if (g === "sonyliv s2") return "https://ik.imagekit.io/yjtx9nh9y/sony-liv-logo-hd.png?updatedAt=1777812797381";
+  if (g === "sunnxt") return "https://ik.imagekit.io/yjtx9nh9y/vecteezy_sun-nxt-transparent-icon_51336401.png";
+  if (g.startsWith("jios3")) return "https://ik.imagekit.io/yjtx9nh9y/Jio-TV-Logo.png?updatedAt=1777823901229";
+
   if (g.includes("fancode") || g.includes("𝗳𝗮𝗻𝗰𝗼𝗱𝗲")) return "https://ik.imagekit.io/yjtx9nh9y/vecteezy_fancode-app-icon-on-transparent-background_69146538.png";
   if (g.includes("icc") || g.includes("𝗶🇨🇴") || g.includes("𝗶𝗰🇨🇵") || g.includes("𝗶𝗰𝗰") || g.includes("𝗶𝗰𝗰 𝘁𝘃") || g.includes("icc tv")) return "https://ik.imagekit.io/yjtx9nh9y/62823e9932b32411608aa856.png";
   if (g.includes("sony") || g.includes("sonyliv")) return "https://ik.imagekit.io/yjtx9nh9y/sony-liv-logo-hd.png";
@@ -669,6 +678,89 @@ async function buildSupport(): Promise<string> {
   return m3u;
 }
 
+// ==========================================
+// 8. EXTRA REFRESHING PLAYLIST (Xovt)
+// ==========================================
+async function buildExtraPlaylists(): Promise<string> {
+  const m3uUrl = "https://raw.githubusercontent.com/cartel187/xovt/refs/heads/main/playlist.m3u";
+  let m3u = "";
+
+  try {
+    const res = await fetch(`${m3uUrl}?t=${Date.now()}`, { headers: { 'Cache-Control': 'no-cache' } });
+    if (res.ok) {
+      const text = await res.text();
+      // Parse without default group/logo so we get the original attributes from the M3U file
+      const parsedChannels = parseM3uTextToChannels(text, "", "");
+
+      const filteredChannels = parsedChannels.filter(ch => {
+        const group = (ch.groupTitle || "").toLowerCase();
+        
+        // Match conditions:
+        const isJioCinema = group.includes("jio cinema");
+        const isJioTv = group.includes("jio ⭕");
+        const isSonyLiv = group.includes("sonyliv channel");
+        const isSunNxt = group.includes("sunnxt");
+
+        return isJioCinema || isJioTv || isSonyLiv || isSunNxt;
+      });
+
+      let reconstructedM3u = "";
+      for (const channel of filteredChannels) {
+        let { contentId, name, mpd, cookie, groupTitle } = channel;
+        let logoUrl = channel.logoUrl || "";
+        const groupLower = groupTitle.toLowerCase();
+
+        // Brandings & Renaming translation matching user instructions:
+        if (groupLower.includes("jio cinema")) {
+          groupTitle = "Jio Cinema";
+          logoUrl = "https://ik.imagekit.io/yjtx9nh9y/Jiocinema.png";
+        } else if (groupLower.includes("jio ⭕")) {
+          // Replace both "JIO ⭕|" and "JIO ⭕" with "JioS3 "
+          groupTitle = groupTitle.replace(/JIO\s*⭕\s*\|?/gi, "JioS3 ").replace(/\s+/g, " ").trim();
+          logoUrl = "https://ik.imagekit.io/yjtx9nh9y/Jio-TV-Logo.png?updatedAt=1777823901229";
+        } else if (groupLower.includes("sonyliv channel")) {
+          groupTitle = "SonyLIV S2";
+          logoUrl = "https://ik.imagekit.io/yjtx9nh9y/sony-liv-logo-hd.png?updatedAt=1777812797381";
+        } else if (groupLower.includes("sunnxt")) {
+          groupTitle = "SunNxt";
+          logoUrl = "https://ik.imagekit.io/yjtx9nh9y/vecteezy_sun-nxt-transparent-icon_51336401.png";
+        }
+
+        const chUA = channel.userAgent || "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36";
+
+        let kodiPropsBlock = "";
+        if (channel.kodiprops && channel.kodiprops.length > 0) {
+          for (const prop of channel.kodiprops) {
+            kodiPropsBlock += `${prop}\n`;
+          }
+        }
+        let extraOptsBlock = "";
+        if (channel.extraOpts && channel.extraOpts.length > 0) {
+          for (const opt of channel.extraOpts) {
+            extraOptsBlock += `${opt}\n`;
+          }
+        }
+
+        reconstructedM3u += `#EXTINF:-1 tvg-id="${contentId}" tvg-name="${name}" tvg-logo="${logoUrl}" group-title="${groupTitle}" group-logo="${logoUrl}", ${name}\n`;
+        if (kodiPropsBlock) reconstructedM3u += kodiPropsBlock;
+        if (extraOptsBlock) reconstructedM3u += extraOptsBlock;
+        if (chUA) {
+          reconstructedM3u += `#EXTVLCOPT:http-user-agent=${chUA}\n`;
+        }
+        if (cookie) {
+          reconstructedM3u += `#EXTVLCOPT:http-cookie=${cookie}\n`;
+        }
+        reconstructedM3u += `${mpd}${channel.userAgent ? '|User-Agent=' + encodeURIComponent(channel.userAgent) : ''}${cookie ? '&Cookie=' + encodeURIComponent(cookie) : ''}\n\n`;
+      }
+      m3u = reconstructedM3u;
+    }
+  } catch (e) {
+    console.error("Extra Refreshing Playlists Error", e);
+  }
+
+  return m3u + (!m3u.endsWith("\n\n") ? "\n\n" : "");
+}
+
 // Resilient Parser for standard remote M3U playlist feed
 async function parseM3uUrl(url: string) {
   try {
@@ -991,7 +1083,7 @@ async function fetchJioData(force = false) {
   
   console.log("[Source] Merging multifeed scraper streams...");
   try {
-    const [fcM3u, iccM3u, sonyM3u, sonyEventsM3u, cricM3u, fifaM3u, starM3u, supportM3u] = await Promise.all([
+    const [fcM3u, iccM3u, sonyM3u, sonyEventsM3u, cricM3u, fifaM3u, starM3u, supportM3u, extraM3u] = await Promise.all([
       buildFanCode(),
       buildIccTv(),
       buildSonyLiv(),
@@ -999,17 +1091,19 @@ async function fetchJioData(force = false) {
       buildCricHD(),
       buildFifaPlus(),
       buildStarSports(),
-      buildSupport()
+      buildSupport(),
+      buildExtraPlaylists()
     ]);
 
     const fcChannels = parseM3uTextToChannels(fcM3u, "𝗙𝗔𝗡𝗖𝗢𝗗𝗘", "https://ik.imagekit.io/yjtx9nh9y/vecteezy_fancode-app-icon-on-transparent-background_69146538.png");
-    const iccChannels = parseM3uTextToChannels(iccM3u, "𝗜𝗖𝗖 𝗧𝗩", "https://ik.imagekit.io/yjtx9nh9y/62823e9932b32411608aa856.png");
+    const iccChannels = parseM3uTextToChannels(iccM3u, "I🇨🇨 TV", "https://ik.imagekit.io/yjtx9nh9y/62823e9932b32411608aa856.png");
     const sonyChannels = parseM3uTextToChannels(sonyM3u, "SonyLIV", "https://ik.imagekit.io/yjtx9nh9y/sony-liv-logo-hd.png");
     const sonyEventsChannels = parseM3uTextToChannels(sonyEventsM3u, "SonyLiv Events", "https://ik.imagekit.io/yjtx9nh9y/sony-liv-logo-hd.png");
     const cricChannels = parseM3uTextToChannels(cricM3u, "CricHD", "https://ik.imagekit.io/yjtx9nh9y/images%20(2).jpeg");
     const fifaChannels = parseM3uTextToChannels(fifaM3u, "FIFA Plus", "https://ik.imagekit.io/yjtx9nh9y/images.png");
     const starSportsChannels = parseM3uTextToChannels(starM3u, "Star Sports", "https://ik.imagekit.io/yjtx9nh9y/947787.jpg");
     const supportChannels = parseM3uTextToChannels(supportM3u, "𝗦𝗨𝗣𝗣𝗢𝗥𝗧", "https://ik.imagekit.io/yjtx9nh9y/sllmnhx-telegram-6896827.svg?updatedAt=1777824421413");
+    const extraChannels = parseM3uTextToChannels(extraM3u, "");
     
     // Process original Jio channels (keep "JioS2 " prefix, filter out scraper brands to avoid mixing)
     const originalJio = baseJioData.livechannels
@@ -1037,7 +1131,8 @@ async function fetchJioData(force = false) {
       ...cricChannels,
       ...fifaChannels,
       ...starSportsChannels,
-      ...supportChannels
+      ...supportChannels,
+      ...extraChannels
     ].map((ch: any) => {
       const groupName = ch.groupTitle || getChannelCategory(ch.name);
       return {
@@ -1142,7 +1237,7 @@ const playlistHandler = async (req: express.Request, res: express.Response): Pro
     }
     
     // 1. Gather all Scraper M3U blocks
-    const [fancodeM3u, iccM3u, sonyM3u, sonyEventsM3u, crichdM3u, fifaM3u, starSportsM3u, supportM3u] = await Promise.all([
+    const [fancodeM3u, iccM3u, sonyM3u, sonyEventsM3u, crichdM3u, fifaM3u, starSportsM3u, supportM3u, extraM3u] = await Promise.all([
       buildFanCode(),
       buildIccTv(),
       buildSonyLiv(),
@@ -1150,11 +1245,12 @@ const playlistHandler = async (req: express.Request, res: express.Response): Pro
       buildCricHD(),
       buildFifaPlus(),
       buildStarSports(),
-      buildSupport()
+      buildSupport(),
+      buildExtraPlaylists()
     ]);
 
     const customM3u = await buildCustomPlaylistsM3u(outputFormat);
-    let combinedStreams = fancodeM3u + iccM3u + sonyM3u + sonyEventsM3u + crichdM3u + fifaM3u + starSportsM3u + supportM3u + customM3u;
+    let combinedStreams = fancodeM3u + iccM3u + sonyM3u + sonyEventsM3u + crichdM3u + fifaM3u + starSportsM3u + supportM3u + extraM3u + customM3u;
 
     if (!combinedStreams.includes("#EXTINF")) {
       const fallbackVideoUrl = "https://cartelended.vercel.app/cartelended.m3u8";
@@ -1255,6 +1351,9 @@ const playlistHandler = async (req: express.Request, res: express.Response): Pro
           !tLine.includes("icc") &&
           !tLine.includes("fifa") &&
           !tLine.includes("star") &&
+          !tLine.includes("cartel187") &&
+          !tLine.includes("jiocinema") &&
+          !tLine.includes("sunnxt") &&
           !tLine.includes("cartelended.vercel.app") && 
           !tLine.includes("xociety-intro.vercel.app") && 
           !tLine.includes("xobypass=true") && 
