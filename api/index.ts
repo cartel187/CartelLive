@@ -61,6 +61,12 @@ function handleSecurityGate(
      userAgent = req.query.ua as string;
   }
   const token = (req.query.token as string) || (req.query.key as string);
+  const workflowSecret = req.headers["x-cartel-secret"];
+
+  // 0. Workflow Bypass (Used for GitHub Actions)
+  if (workflowSecret === "workflow-sync-bot") {
+    return next();
+  }
 
   // 1. Strict User-Agent Gate (Only IPTV Players)
   if (config.enableUserAgentCheck && !isAllowedPlayer(userAgent)) {
