@@ -86,13 +86,13 @@ function cleanGroupTitle(group: string, isOriginalJio: boolean): string {
   let g = group.trim();
   const lower = g.toLowerCase();
   
-  if (lower === "jio cinema" || lower === "sonyliv s2" || lower === "sunnxt" || lower.startsWith("jios3")) {
+  if (g === "sonyliv s2" || g.startsWith("jios3")) {
     return g;
   }
   
   if (lower.includes("fancode") || lower.includes("𝗳𝗮𝗻𝗰𝗼𝗱𝗲")) return "𝗙𝗔𝗡𝗖𝗢𝗗𝗘";
   if (lower.includes("icc") || lower.includes("𝗶🇨🇴") || lower.includes("𝗶𝗰🇨🇵") || lower.includes("𝗶𝗰𝗰") || lower.includes("𝗶𝗰𝗰 𝘁𝘃") || lower.includes("icc tv")) return "𝗜🇨🇨 𝗧𝗩";
-  if (lower.includes("sony") || lower.includes("snyliv") || lower.includes("sonyliv")) return "SonyLIV";
+  if (lower.includes("sony") || lower.includes("snyliv") || lower.includes("sonyliv")) return "SonyLIV S2";
   if (lower.includes("crichd") || lower.includes("crichd")) return "CricHD";
   if (lower.includes("fifa")) return "FIFA Plus";
   if (lower.includes("star sports")) return "Star Sports";
@@ -115,9 +115,7 @@ function cleanGroupTitle(group: string, isOriginalJio: boolean): string {
 // Resolve category logos dynamically matching user specifications
 function getGroupLogo(groupName: string): string {
   const g = groupName.toLowerCase();
-  if (g.includes("jio cinema")) return "https://ik.imagekit.io/yjtx9nh9y/Jiocinema.png";
   if (g.includes("sonyliv s2")) return "https://ik.imagekit.io/yjtx9nh9y/sony-liv-logo-hd.png?updatedAt=1777812797381";
-  if (g.includes("sunnxt")) return "https://ik.imagekit.io/yjtx9nh9y/vecteezy_sun-nxt-transparent-icon_51336401.png";
   if (g.includes("jios3")) return "https://ik.imagekit.io/yjtx9nh9y/Jio-TV-Logo.png?updatedAt=1777823901229";
 
   if (g.includes("fancode") || g.includes("𝗳𝗮𝗻𝗰𝗼𝗱𝗲")) return "https://ik.imagekit.io/yjtx9nh9y/vecteezy_fancode-app-icon-on-transparent-background_69146538.png";
@@ -406,7 +404,7 @@ async function buildSonyLivEvents(): Promise<string> {
 
 async function buildSonyLiv(): Promise<string> {
   const m3uUrl = "https://raw.githubusercontent.com/cartel187/CartelSony/refs/heads/main/SonyLiv.m3u";
-  const categoryName = "SonyLIV";
+  const categoryName = "SonyLIV S2";
   const categoryLogo = "https://ik.imagekit.io/yjtx9nh9y/sony-liv-logo-hd.png";
   let m3u = "";
 
@@ -705,12 +703,10 @@ async function buildExtraPlaylists(): Promise<string> {
         const group = (ch.groupTitle || "").toLowerCase();
         
         // Match conditions:
-        const isJioCinema = group.includes("jio cinema");
         const isJioTv = group.includes("jio ⭕");
         const isSonyLiv = group.includes("sonyliv channel");
-        const isSunNxt = group.includes("sunnxt");
 
-        return isJioCinema || isJioTv || isSonyLiv || isSunNxt;
+        return isJioTv || isSonyLiv;
       });
 
       let reconstructedM3u = "";
@@ -723,12 +719,9 @@ async function buildExtraPlaylists(): Promise<string> {
         if (groupLower.includes("jio ⭕")) {
           groupTitle = groupTitle.replace(/JIO\s*⭕\s*\|?/gi, "JioS3 ").replace(/\s+/g, " ").trim();
           groupLogo = "https://ik.imagekit.io/yjtx9nh9y/Jio-TV-Logo.png?updatedAt=1777823901229";
-        } else if (groupLower.includes("jio cinema")) {
-          groupLogo = "https://ik.imagekit.io/yjtx9nh9y/Jiocinema.png";
         } else if (groupLower.includes("sonyliv channel")) {
+          groupTitle = "SonyLIV S2";
           groupLogo = "https://ik.imagekit.io/yjtx9nh9y/sony-liv-logo-hd.png?updatedAt=1777812797381";
-        } else if (groupLower.includes("sunnxt")) {
-          groupLogo = "https://ik.imagekit.io/yjtx9nh9y/vecteezy_sun-nxt-transparent-icon_51336401.png";
         }
 
         const chUA = channel.userAgent || "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36";
@@ -1360,8 +1353,6 @@ const playlistHandler = async (req: express.Request, res: express.Response): Pro
           !tLine.includes("fifa") &&
           !tLine.includes("star") &&
           !tLine.includes("cartel187") &&
-          !tLine.includes("jiocinema") &&
-          !tLine.includes("sunnxt") &&
           !tLine.includes("cartelended.vercel.app") && 
           !tLine.includes("xociety-intro.vercel.app") && 
           !tLine.includes("xobypass=true") && 
