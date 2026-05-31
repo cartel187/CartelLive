@@ -12,24 +12,24 @@ async function startServer() {
     const bypassToken = "cartelflag";
     const telegramUrl = "https://t.me/cartel187";
     
-    // 1. Allow Static Assets (JS, CSS, Images) to load regardless
-    if (req.path.includes(".") || req.path.startsWith("/@")) {
+    // 1. Always allow API traffic (it has its own security tokens)
+    if (req.path.startsWith("/api")) {
       return next();
     }
 
-    // 2. Allow specific API paths if they have their own tokens
-    // but the user's requirement is "visit the domain" -> redirect
-    const token = req.query.token;
+    // 2. Allow Static Assets and Vite internal paths
+    if (req.path.includes(".") || req.path.startsWith("/@") || req.path.startsWith("/node_modules")) {
+      return next();
+    }
 
-    // 3. Check for the token
+    // 3. User Bypass Token (Domain Access)
+    const token = req.query.token;
     if (token === bypassToken) {
       return next();
     }
 
-    // --- Dynamic Redirect Logic ---
-    // If it's a browser page request (no extension, not an XHR typically)
-    // and no token is present, we send to Telegram.
-    console.log(`[Guard] Blocked access to ${req.path} from ${req.ip} - Access with ?token=${bypassToken}`);
+    // 4. Redirect only the "main" entry points/pages
+    console.log(`[Guard] Blocked access to ${req.path} from ${req.ip} - Redirecting to Telegram`);
     return res.redirect(telegramUrl);
   });
 
