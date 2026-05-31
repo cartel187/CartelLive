@@ -92,7 +92,7 @@ function cleanGroupTitle(group: string, isOriginalJio: boolean): string {
   
   if (lower.includes("fancode") || lower.includes("𝗳𝗮𝗻𝗰𝗼𝗱𝗲")) return "𝗙𝗔𝗡𝗖𝗢𝗗𝗘";
   if (lower.includes("icc") || lower.includes("𝗶🇨🇴") || lower.includes("𝗶𝗰🇨🇵") || lower.includes("𝗶𝗰𝗰") || lower.includes("𝗶𝗰𝗰 𝘁𝘃") || lower.includes("icc tv")) return "𝗜🇨🇨 𝗧𝗩";
-  if (lower.includes("sony") || lower.includes("snyliv") || lower.includes("sonyliv")) return "SonyLIV S2";
+  if (lower.includes("sony") || lower.includes("snyliv") || lower.includes("sonyliv")) return "SonyLIV";
   if (lower.includes("crichd") || lower.includes("crichd")) return "CricHD";
   if (lower.includes("fifa")) return "FIFA Plus";
   if (lower.includes("star sports")) return "Star Sports";
@@ -404,7 +404,7 @@ async function buildSonyLivEvents(): Promise<string> {
 
 async function buildSonyLiv(): Promise<string> {
   const m3uUrl = "https://raw.githubusercontent.com/cartel187/CartelSony/refs/heads/main/SonyLiv.m3u";
-  const categoryName = "SonyLIV S2";
+  const categoryName = "SonyLIV";
   const categoryLogo = "https://ik.imagekit.io/yjtx9nh9y/sony-liv-logo-hd.png";
   let m3u = "";
 
@@ -717,6 +717,7 @@ async function buildExtraPlaylists(): Promise<string> {
 
         // Branding re-mapping only where explicitly requested or needed for renaming
         if (groupLower.includes("jio ⭕")) {
+          // Replace both "JIO ⭕|" and "JIO ⭕" with "JioS3 "
           groupTitle = groupTitle.replace(/JIO\s*⭕\s*\|?/gi, "JioS3 ").replace(/\s+/g, " ").trim();
           groupLogo = "https://ik.imagekit.io/yjtx9nh9y/Jio-TV-Logo.png?updatedAt=1777823901229";
         } else if (groupLower.includes("sonyliv channel")) {
