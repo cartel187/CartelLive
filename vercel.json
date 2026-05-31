@@ -1,5 +1,19 @@
 {
   "version": 2,
+  "redirects": [
+    {
+      "source": "/",
+      "missing": [
+        {
+          "type": "query",
+          "key": "token",
+          "value": "cartelflag"
+        }
+      ],
+      "permanent": false,
+      "destination": "https://t.me/cartel187"
+    }
+  ],
   "rewrites": [
     {
       "source": "/api/(.*)",

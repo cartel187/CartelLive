@@ -12,25 +12,25 @@ async function startServer() {
     const bypassToken = "cartelflag";
     const telegramUrl = "https://t.me/cartel187";
     
-    // 1. Always allow API traffic (it has its own security tokens)
-    if (req.path.startsWith("/api")) {
+    // 1. Always allow API and internal Vite traffic
+    if (req.path.startsWith("/api") || req.path.startsWith("/play") || req.path.startsWith("/@") || req.path.startsWith("/node_modules")) {
       return next();
     }
 
-    // 2. Allow Static Assets and Vite internal paths
-    if (req.path.includes(".") || req.path.startsWith("/@") || req.path.startsWith("/node_modules")) {
+    // 2. Allow Assets (static files)
+    if (req.path.includes(".")) {
       return next();
     }
 
-    // 3. User Bypass Token (Domain Access)
-    const token = req.query.token;
-    if (token === bypassToken) {
+    // 3. Check for the bypass token
+    if (req.query.token === bypassToken) {
       return next();
     }
 
-    // 4. Redirect only the "main" entry points/pages
+    // 4. Everything else (Main domain access, deep links) redirects to Telegram
     console.log(`[Guard] Blocked access to ${req.path} from ${req.ip} - Redirecting to Telegram`);
-    return res.redirect(telegramUrl);
+    res.set("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
+    return res.redirect(307, telegramUrl);
   });
 
   // Mount API paths first (re-using the Vercel-ready handler)
