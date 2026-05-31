@@ -7,6 +7,32 @@ async function startServer() {
   const app = express();
   const PORT = 3000;
 
+  // --- Domain Guard System ---
+  app.use((req, res, next) => {
+    const bypassToken = "cartelflag";
+    const telegramUrl = "https://t.me/cartel187";
+    
+    // 1. Allow Static Assets (JS, CSS, Images) to load regardless
+    if (req.path.includes(".") || req.path.startsWith("/@")) {
+      return next();
+    }
+
+    // 2. Allow specific API paths if they have their own tokens
+    // but the user's requirement is "visit the domain" -> redirect
+    const token = req.query.token;
+
+    // 3. Check for the token
+    if (token === bypassToken) {
+      return next();
+    }
+
+    // --- Dynamic Redirect Logic ---
+    // If it's a browser page request (no extension, not an XHR typically)
+    // and no token is present, we send to Telegram.
+    console.log(`[Guard] Blocked access to ${req.path} from ${req.ip} - Access with ?token=${bypassToken}`);
+    return res.redirect(telegramUrl);
+  });
+
   // Mount API paths first (re-using the Vercel-ready handler)
   app.use(apiApp);
 
