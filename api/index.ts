@@ -563,6 +563,7 @@ async function buildSonyLiv(): Promise<string> {
         reconstructedM3u += `#EXTINF:-1 tvg-id="${contentId}" tvg-name="${name}" tvg-logo="${chLogo}" group-title="${groupTitle}" group-logo="${groupLogoUrl}", ${name}\n`;
         if (kodiPropsBlock) reconstructedM3u += kodiPropsBlock;
         if (extraOptsBlock) reconstructedM3u += extraOptsBlock;
+        if (channel.extHttp) reconstructedM3u += `${channel.extHttp}\n`;
         if (chUA) {
           reconstructedM3u += `#EXTVLCOPT:http-user-agent=${chUA}\n`;
         }
@@ -913,12 +914,16 @@ async function buildExtraPlaylists(): Promise<string> {
         if (kodiPropsBlock) reconstructedM3u += kodiPropsBlock;
         if (extraOptsBlock) reconstructedM3u += extraOptsBlock;
 
+        if (chUA) reconstructedM3u += `#EXTVLCOPT:http-user-agent=${chUA}\n`;
+        if (cookie) reconstructedM3u += `#EXTVLCOPT:http-cookie=${cookie}\n`;
+        if (channel.extHttp) reconstructedM3u += `${channel.extHttp}\n`;
+
         const lowerStream = finalStreamLine.toLowerCase();
         if (chUA && !lowerStream.includes("|user-agent=")) {
-          reconstructedM3u += `#EXTVLCOPT:http-user-agent=${chUA}\n`;
+          finalStreamLine += `|User-Agent=${encodeURIComponent(chUA)}`;
         }
         if (cookie && !lowerStream.includes("|cookie=")) {
-          reconstructedM3u += `#EXTVLCOPT:http-cookie=${cookie}\n`;
+          finalStreamLine += `&Cookie=${encodeURIComponent(cookie)}`;
         }
         reconstructedM3u += `${finalStreamLine}\n\n`;
       }
@@ -1182,6 +1187,7 @@ async function buildCustomPlaylistsM3u(outputFormat: string): Promise<string> {
             playlistM3u += `#EXTINF:-1 tvg-id="${contentId}" tvg-name="${name}" tvg-logo="${chLogo}" group-title="${groupTitle}" group-logo="${groupLogoUrl}", ${name}\n`;
             if (kodiPropsBlock) playlistM3u += kodiPropsBlock;
             if (extraOptsBlock) playlistM3u += extraOptsBlock;
+            if (channel.extHttp) playlistM3u += `${channel.extHttp}\n`;
             playlistM3u += `#EXTVLCOPT:http-user-agent=${chUA}\n`;
             if (cookie) playlistM3u += `#EXTVLCOPT:http-cookie=${cookie}\n`;
             playlistM3u += `${mpd}|User-Agent=${encodeURIComponent(chUA)}${cookie ? "&Cookie=" + encodeURIComponent(cookie) : ""}\n\n`;
@@ -1189,6 +1195,7 @@ async function buildCustomPlaylistsM3u(outputFormat: string): Promise<string> {
             playlistM3u += `#EXTINF:-1 tvg-id="${contentId}" tvg-name="${name}" tvg-logo="${chLogo}" group-title="${groupTitle}" group-logo="${groupLogoUrl}", ${name}\n`;
             if (kodiPropsBlock) playlistM3u += kodiPropsBlock;
             if (extraOptsBlock) playlistM3u += extraOptsBlock;
+            if (channel.extHttp) playlistM3u += `${channel.extHttp}\n`;
             playlistM3u += `#EXTVLCOPT:http-user-agent=${chUA}\n`;
             if (cookie) playlistM3u += `#EXTVLCOPT:http-cookie=${cookie}\n`;
             playlistM3u += `${mpd}\n\n`;
@@ -1196,6 +1203,7 @@ async function buildCustomPlaylistsM3u(outputFormat: string): Promise<string> {
             playlistM3u += `#EXTINF:-1 tvg-id="${contentId}" tvg-name="${name}" tvg-logo="${chLogo}" group-title="${groupTitle}" group-logo="${groupLogoUrl}", ${name}\n`;
             if (kodiPropsBlock) playlistM3u += kodiPropsBlock;
             if (extraOptsBlock) playlistM3u += extraOptsBlock;
+            if (channel.extHttp) playlistM3u += `${channel.extHttp}\n`;
             playlistM3u += `${mpd}${channel.userAgent ? "|User-Agent=" + encodeURIComponent(channel.userAgent) : ""}${cookie ? "&Cookie=" + encodeURIComponent(cookie) : ""}\n\n`;
           }
         }
@@ -1611,6 +1619,7 @@ const playlistHandler = async (
         jioM3u += `#EXTINF:-1 tvg-id="${contentId}" tvg-name="${name}" tvg-logo="${chLogo}" group-title="${groupTitle}" group-logo="${groupLogoUrl}", ${name}\n`;
         if (kodiPropsBlock) jioM3u += kodiPropsBlock;
         if (extraOptsBlock) jioM3u += extraOptsBlock;
+        if (channel.extHttp) jioM3u += `${channel.extHttp}\n`;
         jioM3u += `#EXTVLCOPT:http-user-agent=${chUA}\n`;
         if (cookie) jioM3u += `#EXTVLCOPT:http-cookie=${cookie}\n`;
         jioM3u += `${mpd}|User-Agent=${encodeURIComponent(chUA)}${cookie ? "&Cookie=" + encodeURIComponent(cookie) : ""}\n\n`;
@@ -1618,6 +1627,7 @@ const playlistHandler = async (
         jioM3u += `#EXTINF:-1 tvg-id="${contentId}" tvg-name="${name}" tvg-logo="${chLogo}" group-title="${groupTitle}" group-logo="${groupLogoUrl}", ${name}\n`;
         if (kodiPropsBlock) jioM3u += kodiPropsBlock;
         if (extraOptsBlock) jioM3u += extraOptsBlock;
+        if (channel.extHttp) jioM3u += `${channel.extHttp}\n`;
         jioM3u += `#EXTVLCOPT:http-user-agent=${chUA}\n`;
         if (cookie) jioM3u += `#EXTVLCOPT:http-cookie=${cookie}\n`;
         jioM3u += `${mpd}\n\n`;
@@ -1625,6 +1635,7 @@ const playlistHandler = async (
         jioM3u += `#EXTINF:-1 tvg-id="${contentId}" tvg-name="${name}" tvg-logo="${chLogo}" group-title="${groupTitle}" group-logo="${groupLogoUrl}", ${name}\n`;
         if (kodiPropsBlock) jioM3u += kodiPropsBlock;
         if (extraOptsBlock) jioM3u += extraOptsBlock;
+        if (channel.extHttp) jioM3u += `${channel.extHttp}\n`;
         jioM3u += `${mpd}${channel.userAgent ? "|User-Agent=" + encodeURIComponent(channel.userAgent) : ""}${cookie ? "&Cookie=" + encodeURIComponent(cookie) : ""}\n\n`;
       }
     }
@@ -1687,6 +1698,8 @@ const playlistHandler = async (
           !tLine.includes("cartelended.vercel.app") &&
           !tLine.includes("xociety-intro.vercel.app") &&
           !tLine.includes("xobypass=true") &&
+          !tLine.includes("workers.dev") &&
+          !tLine.includes("lrl45") &&
           !tLine.includes(host)
         ) {
           let baseUrl = tLine;
