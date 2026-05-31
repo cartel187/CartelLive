@@ -915,10 +915,10 @@ async function buildExtraPlaylists(): Promise<string> {
 
         const lowerStream = finalStreamLine.toLowerCase();
         if (chUA && !lowerStream.includes("|user-agent=")) {
-          finalStreamLine += `|User-Agent=${encodeURIComponent(chUA)}`;
+          reconstructedM3u += `#EXTVLCOPT:http-user-agent=${chUA}\n`;
         }
         if (cookie && !lowerStream.includes("|cookie=")) {
-          finalStreamLine += `|Cookie=${encodeURIComponent(cookie)}`;
+          reconstructedM3u += `#EXTVLCOPT:http-cookie=${cookie}\n`;
         }
         reconstructedM3u += `${finalStreamLine}\n\n`;
       }
