@@ -735,18 +735,8 @@ async function buildExtraPlaylists(): Promise<string> {
           groupLogo = "https://ik.imagekit.io/yjtx9nh9y/vecteezy_sun-nxt-transparent-icon_51336401.png";
         }
 
-        // Header merging logic: 
-        // 1. Extract what's already in the pipes
-        // 2. Add extracted headers if they are missing
         const chUA = channel.userAgent || "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36";
-        let streamLine = mpd;
-
-        if (!streamLine.includes("|User-Agent=")) {
-           streamLine += `|User-Agent=${encodeURIComponent(chUA)}`;
-        }
-        if (cookie && !streamLine.includes("|Cookie=")) {
-           streamLine += `|Cookie=${encodeURIComponent(cookie)}`;
-        }
+        const streamLine = mpd;
 
         let kodiPropsBlock = "";
         if (channel.kodiprops && channel.kodiprops.length > 0) {
@@ -765,6 +755,12 @@ async function buildExtraPlaylists(): Promise<string> {
         reconstructedM3u += `#EXTINF:-1 tvg-id="${contentId}" tvg-name="${name}" tvg-logo="" group-title="${groupTitle}" group-logo="${groupLogo}", ${name}\n`;
         if (kodiPropsBlock) reconstructedM3u += kodiPropsBlock;
         if (extraOptsBlock) reconstructedM3u += extraOptsBlock;
+        if (chUA) {
+          reconstructedM3u += `#EXTVLCOPT:http-user-agent=${chUA}\n`;
+        }
+        if (cookie) {
+          reconstructedM3u += `#EXTVLCOPT:http-cookie=${cookie}\n`;
+        }
         reconstructedM3u += `${streamLine}\n\n`;
       }
       m3u = reconstructedM3u;
@@ -1153,7 +1149,7 @@ async function fetchJioData(force = false) {
       return {
         ...ch,
         groupTitle: cleanGroupTitle(groupName, false),
-        logoUrl: ch.logoUrl || ""
+        logoUrl: ch.logoUrl || `https://jiotvimages.live.jio.com/jiotv_images/${ch.contentId}_logo.png`
       };
     });
     
