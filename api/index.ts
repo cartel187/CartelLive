@@ -1087,28 +1087,18 @@ async function parseM3uUrl(url: string) {
 }
 
 // Support endpoints and helpers for Custom M3U Playlists
-import * as admin from 'firebase-admin';
-import { getFirestore } from 'firebase-admin/firestore';
-import firebaseConfig from '../firebase-applet-config.json';
-
-// Initialize Firebase Admin
-if (!admin.apps.length) {
-  admin.initializeApp({
-    credential: admin.credential.applicationDefault(),
-    projectId: firebaseConfig.projectId,
-  });
-}
-
-const db = getFirestore(admin.app());
-
 const STALKER_TOKEN = "cartelstalk";
 
 async function fetchStalkerPlaylists(): Promise<any[]> {
+  const filePath = "/stalker_playlists.json";
   try {
-    const snapshot = await db.collection("stalkerPlaylists").get();
-    return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    if (fs.existsSync(filePath)) {
+      const content = fs.readFileSync(filePath, "utf-8");
+      return JSON.parse(content);
+    }
+    return [];
   } catch (err) {
-    console.error("Error reading stalker_playlists from Firestore", err);
+    console.error("Error reading stalker_playlists.json", err);
     return [];
   }
 }
@@ -1896,32 +1886,49 @@ router.get("/stalker-playlists", async (req, res) => {
   }
 });
 
-router.post("/stalker-playlists", express.json(), async (req, res) => {
+router.post("/stalker-playlists", express.json(), (req, res) => {
   const { id, name, url, logo, enabled } = req.body;
   if (!name || !url) {
     return res.status(400).json({ success: false, error: "Name and M3U URL are required" });
   }
 
+  const filePath = "/stalker_playlists.json";
   try {
-    const playlistData = { name, url, logo, enabled: enabled !== false };
-    if (id) {
-      await db.collection("stalkerPlaylists").doc(id).set(playlistData, { merge: true });
-    } else {
-      await db.collection("stalkerPlaylists").add(playlistData);
+    let playlists: any[] = [];
+    if (fs.existsSync(filePath)) {
+      playlists = JSON.parse(fs.readFileSync(filePath, "utf-8"));
     }
-    const playlists = await fetchStalkerPlaylists();
+
+    if (id) {
+      const index = playlists.findIndex((p: any) => p.id === id);
+      if (index !== -1) {
+        playlists[index] = { ...playlists[index], name, url, logo, enabled: enabled !== false };
+      } else {
+        playlists.push({ id, name, url, logo, enabled: enabled !== false });
+      }
+    } else {
+      const newId = "stalker-" + Date.now();
+      playlists.push({ id: newId, name, url, logo, enabled: enabled !== false });
+    }
+
+    fs.writeFileSync(filePath, JSON.stringify(playlists, null, 2), "utf-8");
     return res.json({ success: true, playlists });
   } catch (err: any) {
     return res.status(500).json({ success: false, error: err.message });
   }
 });
 
-router.delete("/stalker-playlists/:id", async (req, res) => {
+router.delete("/stalker-playlists/:id", (req, res) => {
   const { id } = req.params;
+  const filePath = "/stalker_playlists.json";
   try {
-    await db.collection("stalkerPlaylists").doc(id).delete();
-    const playlists = await fetchStalkerPlaylists();
-    return res.json({ success: true, message: "Stalker playlist deleted successfully", playlists });
+    if (fs.existsSync(filePath)) {
+      let playlists = JSON.parse(fs.readFileSync(filePath, "utf-8"));
+      playlists = playlists.filter((p: any) => p.id !== id);
+      fs.writeFileSync(filePath, JSON.stringify(playlists, null, 2), "utf-8");
+      return res.json({ success: true, message: "Stalker playlist deleted successfully", playlists });
+    }
+    return res.json({ success: true, message: "Playlist not found" });
   } catch (err: any) {
     return res.status(500).json({ success: false, error: err.message });
   }
