@@ -1086,30 +1086,8 @@ async function parseM3uUrl(url: string) {
   }
 }
 
-import * as admin from 'firebase-admin';
-import { getFirestore } from 'firebase-admin/firestore';
-import firebaseConfig from '../firebase-applet-config.json';
-
-// Initialize Firebase Admin
-if (!admin.apps.length) {
-  admin.initializeApp({
-    credential: admin.credential.applicationDefault(),
-  });
-}
-
-const db = getFirestore(admin.app(), (firebaseConfig as any).firestoreDatabaseId);
-
+// Support endpoints and helpers for Custom M3U Playlists
 const STALKER_TOKEN = "cartelstalk";
-
-async function fetchStalkerPlaylists(): Promise<any[]> {
-  try {
-    const querySnapshot = await db.collection("stalkerPlaylists").get();
-    return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-  } catch (err) {
-    console.error("Error reading stalker_playlists from Firestore", err);
-    return [];
-  }
-}
 
 async function fetchCustomPlaylistsChannels(): Promise<any[]> {
   const filePath = path.join(process.cwd(), "api", "custom_playlists.json");
@@ -1884,63 +1862,21 @@ router.delete("/custom-playlists/:id", (req, res) => {
   }
 });
 
-// Stalker Playlist Management
-router.get("/stalker-playlists", async (req, res) => {
-  try {
-    const playlists = await fetchStalkerPlaylists();
-    res.json({ success: true, playlists });
-  } catch (err: any) {
-    res.status(500).json({ success: false, error: err.message });
-  }
-});
-
-router.post("/stalker-playlists", express.json(), async (req, res) => {
-  const { id, name, url, logo, enabled } = req.body;
-  if (!name || !url) {
-    return res.status(400).json({ success: false, error: "Name and M3U URL are required" });
-  }
-
-  try {
-    const playlistData = { name, url, logo, enabled: enabled !== false };
-    if (id) {
-      await db.collection("stalkerPlaylists").doc(id).set(playlistData, { merge: true });
-    } else {
-      await db.collection("stalkerPlaylists").add(playlistData);
-    }
-    const playlists = await fetchStalkerPlaylists();
-    return res.json({ success: true, playlists });
-  } catch (err: any) {
-    return res.status(500).json({ success: false, error: err.message });
-  }
-});
-
-router.delete("/stalker-playlists/:id", async (req, res) => {
-  const { id } = req.params;
-  try {
-    await db.collection("stalkerPlaylists").doc(id).delete();
-    return res.json({ success: true, message: "Stalker playlist deleted successfully" });
-  } catch (err: any) {
-    return res.status(500).json({ success: false, error: err.message });
-  }
-});
-
+// Stalker Playlist Management (No persistence required, frontend handles this)
 const stalkerExportHandler = async (req: express.Request, res: express.Response) => {
-  const { id } = req.params;
+  const url = req.query.url as string;
   const token = req.query.token as string;
 
   if (token !== STALKER_TOKEN) {
     return res.redirect(302, config.telegramUrl);
   }
 
+  if (!url) {
+    return res.status(400).send("#EXTM3U\n# Missing URL parameter");
+  }
+
   try {
-    const playlists = await fetchStalkerPlaylists();
-    const playlist = playlists.find(p => p.id === id);
-
-    if (!playlist || !playlist.url) {
-      return res.status(404).send("#EXTM3U\n# Stalker playlist not found or disabled");
-    }
-
-    const response = await fetch(playlist.url, {
+    const response = await fetch(url, {
       headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36" }
     });
     
@@ -1962,14 +1898,14 @@ const stalkerExportHandler = async (req: express.Request, res: express.Response)
     });
 
     res.setHeader("Content-Type", "application/x-mpegurl");
-    res.setHeader("Content-Disposition", `inline; filename="${playlist.name.replace(/[^a-z0-9]/gi, '_')}.m3u"`);
+    res.setHeader("Content-Disposition", `inline; filename="stalker_playlist.m3u"`);
     res.status(200).send(processedLines.join("\n"));
   } catch (err: any) {
     res.status(500).send(`#EXTM3U\n# Error: ${err.message}`);
   }
 };
 
-router.get("/stalker-export/:id", stalkerExportHandler);
+router.get("/stalker-export", stalkerExportHandler);
 
 // Channels list (for dashboard preview, does not output secret stream keys to browser unless authorized)
 router.get("/channels", async (req, res) => {
