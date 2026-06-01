@@ -461,7 +461,7 @@ function getChannelGroup(name) {
   } else if (nom.includes("news") || nom.includes("samachar")) {
     baseGroup = "News";
   }
-  return "JioS2 " + baseGroup;
+  return baseGroup;
 }
 
 // Core M3U compiler route
@@ -570,11 +570,11 @@ Load your personalized URL in any player (TiviMate, Kodi, Apple TV, VLC):
 
   const getChannelGroup = (name: string): string => {
     const nom = name.toLowerCase();
-    if (nom.includes("sports") || nom.includes("khel")) return "JioS2 Sports";
-    if (nom.includes("gold") || nom.includes("movies") || nom.includes("cinema") || nom.includes("picture")) return "JioS2 Movies";
-    if (nom.includes("disney") || nom.includes("junior") || nom.includes("hungama")) return "JioS2 Kids";
-    if (nom.includes("news") || nom.includes("samachar")) return "JioS2 News";
-    return "JioS2 Entertainment";
+    if (nom.includes("sports") || nom.includes("khel")) return "Sports";
+    if (nom.includes("gold") || nom.includes("movies") || nom.includes("cinema") || nom.includes("picture")) return "Movies";
+    if (nom.includes("disney") || nom.includes("junior") || nom.includes("hungama")) return "Kids";
+    if (nom.includes("news") || nom.includes("samachar")) return "News";
+    return "Entertainment";
   };
 
   const filteredChannels = channels.filter(c => {
