@@ -208,21 +208,15 @@ export default function App() {
   };
 
   // Stalker Playlist logic
-  const fetchStalkerPlaylists = async () => {
+  const fetchStalkerPlaylists = () => {
     setLoadingStalker(true);
-    setStalkerError(null);
     try {
-      const response = await fetch("/api/stalker-playlists");
-      if (response.ok) {
-        const data = await response.json();
-        if (data.success) {
-          setStalkerPlaylists(data.playlists || []);
-        } else {
-          setStalkerError(data.error || "Failed to load stalker playlists");
-        }
+      const stored = localStorage.getItem("stalkerPlaylists");
+      if (stored) {
+        setStalkerPlaylists(JSON.parse(stored));
       }
-    } catch (e: any) {
-      setStalkerError(e.message || "Network error loading stalker playlists");
+    } catch (e) {
+      console.error("Error loading stalker playlists", e);
     } finally {
       setLoadingStalker(false);
     }
@@ -233,31 +227,33 @@ export default function App() {
     if (!newStalkerName.trim() || !newStalkerUrl.trim()) return;
     setAddingStalker(true);
     setStalkerError(null);
+    
     try {
-      const body: any = {
+      const newList = [...stalkerPlaylists];
+      const newItem: StalkerPlaylist = {
+        id: editingStalkerId || "stalker-" + Date.now(),
         name: newStalkerName.trim(),
         url: newStalkerUrl.trim(),
-        logo: newStalkerLogo.trim() || undefined
+        logo: newStalkerLogo.trim() || undefined,
+        enabled: true
       };
-      if (editingStalkerId) body.id = editingStalkerId;
-      
-      const response = await fetch("/api/stalker-playlists", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body)
-      });
-      const data = await response.json();
-      if (response.ok && data.success) {
-        setStalkerPlaylists(data.playlists || []);
-        setNewStalkerName("");
-        setNewStalkerUrl("");
-        setNewStalkerLogo("");
-        setEditingStalkerId(null);
-        setStalkerSuccessMessage("Playlist updated successfully!");
-        setTimeout(() => setStalkerSuccessMessage(null), 3500);
+
+      if (editingStalkerId) {
+        const index = newList.findIndex(p => p.id === editingStalkerId);
+        if (index !== -1) newList[index] = newItem;
       } else {
-        throw new Error(data.error || "Failed to save playlist");
+        newList.push(newItem);
       }
+
+      localStorage.setItem("stalkerPlaylists", JSON.stringify(newList));
+      setStalkerPlaylists(newList);
+      
+      setNewStalkerName("");
+      setNewStalkerUrl("");
+      setNewStalkerLogo("");
+      setEditingStalkerId(null);
+      setStalkerSuccessMessage("Playlist updated successfully!");
+      setTimeout(() => setStalkerSuccessMessage(null), 3500);
     } catch (e: any) {
       setStalkerError(e.message);
     } finally {
@@ -268,10 +264,9 @@ export default function App() {
   const handleDeleteStalker = async (id: string) => {
     if (!window.confirm("Delete this Stalker playlist?")) return;
     try {
-      const response = await fetch(`/api/stalker-playlists/${id}`, { method: "DELETE" });
-      if (response.ok) {
-        setStalkerPlaylists(prev => prev.filter(p => p.id !== id));
-      }
+      const newList = stalkerPlaylists.filter(p => p.id !== id);
+      localStorage.setItem("stalkerPlaylists", JSON.stringify(newList));
+      setStalkerPlaylists(newList);
     } catch (e: any) {
       setStalkerError(e.message);
     }
@@ -1496,7 +1491,7 @@ Load your personalized URL in any player (TiviMate, Kodi, Apple TV, VLC):
                     </div>
                   ) : (
                     stalkerPlaylists.map((p) => {
-                      const stalkerExport = `${currentOrigin}/api/stalker-export/${p.id}?token=cartelstalk`;
+                      const stalkerExport = `${currentOrigin}/api/stalker-export?url=${encodeURIComponent(p.url)}&token=cartelstalk`;
                       return (
                         <div key={p.id} className="bg-[#08090f] border border-slate-900 rounded-2xl p-6 hover:border-slate-800 transition-all flex flex-col gap-5 shadow-lg group">
                           <div className="flex items-start justify-between gap-4">
