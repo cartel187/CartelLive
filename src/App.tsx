@@ -215,11 +215,12 @@ export default function App() {
   };
 
   // Fetch live channel listing from Backend API
-  const fetchChannels = async () => {
+  const fetchChannels = async (force: boolean = false) => {
     setLoadingChannels(true);
     setChannelsError(null);
     try {
-      const response = await fetch("/api/channels");
+      const url = force ? "/api/channels?force=true" : "/api/channels";
+      const response = await fetch(url);
       if (response.ok) {
         const data = await response.json();
         if (data.success) {
@@ -243,9 +244,18 @@ export default function App() {
     fetchConfig();
     fetchChannels();
     fetchCustomPlaylists();
+    
+    // Auto-fetch every 1 hour (3600000 ms)
+    const interval = setInterval(() => {
+      console.log("Auto-fetching channels...");
+      fetchChannels(true);
+    }, 3600000);
+
     if (typeof window !== "undefined") {
       setCurrentOrigin(window.location.origin);
     }
+
+    return () => clearInterval(interval);
   }, []);
 
   // Handle saving configurations to server
@@ -647,15 +657,28 @@ Load your personalized URL in any player (TiviMate, Kodi, Apple TV, VLC):
               This system intercepts ordinary browsers, sending viewers instantly to your custom Telegram channel (<span className="text-purple-300 font-semibold font-mono">@{telegramInput.split("/").pop()}</span>). Concurrently, authorized IPTV clients are seamlessly provisioned with fresh generated tokens.
             </p>
           </div>
-          <div className="flex select-none items-center gap-4 bg-[#08090f] p-4 rounded-xl border border-slate-900/70 shrink-0 self-start md:self-auto">
-            <div className="h-10 w-10 flex items-center justify-center bg-indigo-900/30 border border-indigo-500/20 text-indigo-400 rounded-lg shrink-0">
-              <Tv className="w-5 h-5" />
+          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 bg-[#08090f] p-4 rounded-xl border border-slate-900/70 shrink-0">
+            <div className="flex items-center gap-4">
+              <div className="h-10 w-10 flex items-center justify-center bg-indigo-900/30 border border-indigo-500/20 text-indigo-400 rounded-lg shrink-0">
+                <Tv className="w-5 h-5" />
+              </div>
+              <div>
+                <div className="text-[10px] text-slate-500 font-mono flex items-center gap-2">
+                  ACTIVE FEED STATUS
+                  {loadingChannels && <RefreshCw className="w-2.5 h-2.5 animate-spin text-purple-400" />}
+                </div>
+                <div className="text-sm font-semibold text-white tracking-tight">Active: {channels.length} Channels</div>
+                <div className="text-[10px] text-slate-400 font-mono">Synced: {lastUpdated}</div>
+              </div>
             </div>
-            <div>
-              <div className="text-[10px] text-slate-500 font-mono">ACTIVE FEED STATUS</div>
-              <div className="text-sm font-semibold text-white tracking-tight">Active: {channels.length} Channels</div>
-              <div className="text-[10px] text-slate-400 font-mono">Expiring: {timeLeft}</div>
-            </div>
+            <button
+              onClick={() => fetchChannels(true)}
+              disabled={loadingChannels}
+              className="cursor-pointer bg-[#131627] hover:bg-purple-600/20 text-purple-400 hover:text-purple-300 px-3 py-2 rounded-lg border border-purple-500/10 transition-all flex items-center gap-2 text-[10px] font-bold uppercase tracking-wider"
+            >
+              <RefreshCw className={`w-3 h-3 ${loadingChannels ? "animate-spin" : ""}`} />
+              {loadingChannels ? "Refreshing..." : "Force Refresh"}
+            </button>
           </div>
         </div>
 
