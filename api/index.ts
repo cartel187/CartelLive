@@ -1087,22 +1087,6 @@ async function parseM3uUrl(url: string) {
 }
 
 // Support endpoints and helpers for Custom M3U Playlists
-const STALKER_TOKEN = "cartelstalk";
-
-async function fetchStalkerPlaylists(): Promise<any[]> {
-  const filePath = path.join("/tmp/", "stalker_playlists.json");
-  try {
-    if (fs.existsSync(filePath)) {
-      const content = fs.readFileSync(filePath, "utf-8");
-      return JSON.parse(content);
-    }
-    return [];
-  } catch (err) {
-    console.error("Error reading stalker_playlists.json", err);
-    return [];
-  }
-}
-
 async function fetchCustomPlaylistsChannels(): Promise<any[]> {
   const filePath = path.join(process.cwd(), "api", "custom_playlists.json");
   let playlists: any[] = [];
@@ -1810,7 +1794,6 @@ router.post("/custom-playlists", express.json(), (req, res) => {
   }
 
   const filePath = path.join(process.cwd(), "api", "custom_playlists.json");
-  console.log("DEBUG: custom_playlists path:", filePath, "Exists:", fs.existsSync(filePath));
   let playlists: any[] = [];
   try {
     if (fs.existsSync(filePath)) {
@@ -1876,46 +1859,6 @@ router.delete("/custom-playlists/:id", (req, res) => {
     return res.status(500).json({ success: false, error: err.message });
   }
 });
-
-// Stalker Playlist Management
-// Stalker Playlist logic now handles locally in App.tsx via localStorage
-
-
-const stalkerExportHandler = async (req: express.Request, res: express.Response) => {
-  const url = req.query.url as string;
-  const token = req.query.token as string;
-
-  if (token !== STALKER_TOKEN) {
-    return res.redirect(302, config.telegramUrl);
-  }
-
-  if (!url) {
-    return res.status(400).send("#EXTM3U\n# Missing URL parameter");
-  }
-
-  try {
-    const response = await fetch(url, {
-      headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36" }
-    });
-    
-    if (!response.ok) throw new Error("Failed to fetch source playlist");
-    
-    let text = await response.text();
-    const protocol = req.protocol === "https" || req.headers["x-forwarded-proto"] === "https" ? "https" : "http";
-    const host = `${protocol}://${req.get("host")}`;
-
-    // Apply security wrapper to all URLs in the stalker playlist
-    const processedLines = text.split(/\r?\n/);
-
-    res.setHeader("Content-Type", "application/x-mpegurl");
-    res.setHeader("Content-Disposition", `inline; filename="stalker_playlist.m3u"`);
-    res.status(200).send(processedLines.join("\n"));
-  } catch (err: any) {
-    res.status(500).send(`#EXTM3U\n# Error: ${err.message}`);
-  }
-};
-
-router.get("/stalker-export", stalkerExportHandler);
 
 // Channels list (for dashboard preview, does not output secret stream keys to browser unless authorized)
 router.get("/channels", async (req, res) => {
