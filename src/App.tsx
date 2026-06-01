@@ -24,11 +24,9 @@ import {
   FileCode,
   CheckCircle2,
   Eye,
-  EyeOff,
-  Globe,
-  LayoutPanelLeft
+  EyeOff
 } from "lucide-react";
-import { GuardConfig, ChannelItem, ServerStats, SimulationResult, CustomPlaylist, StalkerPlaylist } from "./types";
+import { GuardConfig, ChannelItem, ServerStats, SimulationResult, CustomPlaylist } from "./types";
 
 export default function App() {
   // Config state
@@ -70,58 +68,130 @@ export default function App() {
   const [simulating, setSimulating] = useState(false);
 
   // UI state
-  const [activeTab, setActiveTab] = useState<"dashboard" | "channels" | "custom_m3u" | "stalker" | "simulator">("dashboard");
+  const [activeTab, setActiveTab] = useState<"dashboard" | "channels" | "custom_m3u" | "simulator">("dashboard");
   const [copiedUrl, setCopiedUrl] = useState(false);
-  const [copiedStalkerUrl, setCopiedStalkerUrl] = useState<string | null>(null);
   const [currentOrigin, setCurrentOrigin] = useState("https://your-domain.vercel.app");
 
-  // Stalker Settings state (simplified)
-  const [stalkerSourceUrl, setStalkerSourceUrl] = useState<string>("");
-  const [stalkerContent, setStalkerContent] = useState<any[]>([]);
-  const [loadingStalker, setLoadingStalker] = useState(false);
-  const [stalkerError, setStalkerError] = useState<string | null>(null);
-  const [stalkerLastFetched, setStalkerLastFetched] = useState<string | null>(null);
-  const [stalkerAutoRefresh, setStalkerAutoRefresh] = useState(true);
+  // Custom M3U Playlists states
+  const [customPlaylists, setCustomPlaylists] = useState<CustomPlaylist[]>([]);
+  const [loadingPlaylists, setLoadingPlaylists] = useState(false);
+  const [playlistsError, setPlaylistsError] = useState<string | null>(null);
+  const [newPlaylistName, setNewPlaylistName] = useState("");
+  const [newPlaylistUrl, setNewPlaylistUrl] = useState("");
+  const [newPlaylistLogo, setNewPlaylistLogo] = useState("");
+  const [editingPlaylistId, setEditingPlaylistId] = useState<string | null>(null);
+  const [addingPlaylist, setAddingPlaylist] = useState(false);
+  const [playlistSuccessMessage, setPlaylistSuccessMessage] = useState<string | null>(null);
 
-  // Stalker Playlist logic (Simplified)
-  const fetchStalkerSource = async () => {
-    if (!stalkerSourceUrl.trim()) {
-      setStalkerError("Please enter a valid URL.");
-      return;
-    }
-    setLoadingStalker(true);
-    setStalkerError(null);
+  // Visibility toggles for security inputs
+  const [showToken, setShowToken] = useState(false);
+
+  const fetchCustomPlaylists = async () => {
+    setLoadingPlaylists(true);
+    setPlaylistsError(null);
     try {
-      const response = await fetch(stalkerSourceUrl);
-      if (!response.ok) throw new Error("Failed to fetch from URL");
-      
-      const data = await response.json();
-      // Assume data structure is suitable for display; handle if not
-      setStalkerContent(Array.isArray(data) ? data : (data.channels || [data]));
-      setStalkerLastFetched(new Date().toLocaleTimeString());
-      localStorage.setItem("stalkerSourceUrl", stalkerSourceUrl);
+      const response = await fetch("/api/custom-playlists");
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success) {
+          setCustomPlaylists(data.playlists || []);
+        } else {
+          setPlaylistsError(data.error || "Failed to load custom playlists");
+        }
+      } else {
+        setPlaylistsError(`Server returned status ${response.status}`);
+      }
     } catch (e: any) {
-      setStalkerError("Error fetching from URL: " + e.message);
+      setPlaylistsError(e.message || "Network error loading custom playlists");
     } finally {
-      setLoadingStalker(false);
+      setLoadingPlaylists(false);
     }
   };
 
-  useEffect(() => {
-    const savedUrl = localStorage.getItem("stalkerSourceUrl");
-    if (savedUrl) {
-      setStalkerSourceUrl(savedUrl);
+  const handleSavePlaylist = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newPlaylistName.trim() || !newPlaylistUrl.trim()) {
+      setPlaylistsError("Name and M3U URL are required.");
+      return;
     }
-
-    // Auto-fetch every 1 hour if enabled
-    const interval = setInterval(() => {
-      if (stalkerAutoRefresh) {
-        fetchStalkerSource();
+    setAddingPlaylist(true);
+    setPlaylistsError(null);
+    try {
+      const body: any = {
+        name: newPlaylistName.trim(),
+        url: newPlaylistUrl.trim(),
+        logo: newPlaylistLogo.trim() || undefined
+      };
+      if (editingPlaylistId) {
+        body.id = editingPlaylistId;
       }
-    }, 3600000);
+      const response = await fetch("/api/custom-playlists", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body)
+      });
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success) {
+          setCustomPlaylists(data.playlists || []);
+          setNewPlaylistName("");
+          setNewPlaylistUrl("");
+          setNewPlaylistLogo("");
+          setEditingPlaylistId(null);
+          setPlaylistSuccessMessage(editingPlaylistId ? "Playlist updated successfully!" : "Playlist added successfully!");
+          setTimeout(() => setPlaylistSuccessMessage(null), 3500);
+          fetchChannels(); // Refresh channel database preview list!
+        } else {
+          setPlaylistsError(data.error || "Failed to save custom playlist");
+        }
+      } else {
+        setPlaylistsError(`Server returned status ${response.status}`);
+      }
+    } catch (e: any) {
+      setPlaylistsError(e.message || "Network error saving playlist");
+    } finally {
+      setAddingPlaylist(false);
+    }
+  };
 
-    return () => clearInterval(interval);
-  }, [stalkerAutoRefresh]);
+  const handleDeletePlaylist = async (id: string) => {
+    if (!window.confirm("Are you sure you want to delete this playlist?")) return;
+    setPlaylistsError(null);
+    try {
+      const response = await fetch(`/api/custom-playlists/${id}`, {
+        method: "DELETE"
+      });
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success) {
+          setCustomPlaylists(prev => prev.filter(p => p.id !== id));
+          setPlaylistSuccessMessage("Playlist deleted successfully.");
+          setTimeout(() => setPlaylistSuccessMessage(null), 3000);
+          fetchChannels(); // Refresh channel list preview!
+        } else {
+          setPlaylistsError(data.error || "Failed to delete custom playlist");
+        }
+      } else {
+        setPlaylistsError(`Server returned status ${response.status}`);
+      }
+    } catch (e: any) {
+      setPlaylistsError(e.message || "Network error deleting playlist");
+    }
+  };
+
+  const startEditPlaylist = (p: CustomPlaylist) => {
+    setEditingPlaylistId(p.id || null);
+    setNewPlaylistName(p.name);
+    setNewPlaylistUrl(p.url);
+    setNewPlaylistLogo(p.logo || "");
+  };
+
+  const cancelEditPlaylist = () => {
+    setEditingPlaylistId(null);
+    setNewPlaylistName("");
+    setNewPlaylistUrl("");
+    setNewPlaylistLogo("");
+  };
 
   // Code visualizer Tab details removed
 
@@ -174,7 +244,6 @@ export default function App() {
     fetchConfig();
     fetchChannels();
     fetchCustomPlaylists();
-    fetchStalkerPlaylists();
     
     // Auto-fetch every 1 hour (3600000 ms)
     const interval = setInterval(() => {
@@ -555,12 +624,6 @@ Load your personalized URL in any player (TiviMate, Kodi, Apple TV, VLC):
             Custom M3U ({customPlaylists.length})
           </button>
           <button 
-            onClick={() => setActiveTab("stalker")}
-            className={`cursor-pointer px-4 py-1.5 rounded-lg text-xs font-semibold tracking-wide transition-all ${activeTab === "stalker" ? "bg-gradient-to-r from-purple-900/80 to-indigo-900/80 text-white shadow-md shadow-black/40 border border-purple-500/10" : "text-slate-400 hover:text-white"}`}
-          >
-            Stalker Playlist ({stalkerPlaylists.length})
-          </button>
-          <button 
             onClick={() => setActiveTab("simulator")}
             className={`cursor-pointer px-4 py-1.5 rounded-lg text-xs font-semibold tracking-wide transition-all ${activeTab === "simulator" ? "bg-gradient-to-r from-purple-900/80 to-indigo-900/80 text-white shadow-md shadow-black/40 border border-purple-500/10" : "text-slate-400 hover:text-white"}`}
           >
@@ -638,12 +701,6 @@ Load your personalized URL in any player (TiviMate, Kodi, Apple TV, VLC):
             className={`cursor-pointer flex-1 py-1 px-1 rounded-lg text-[10px] font-semibold tracking-wide transition-all ${activeTab === "custom_m3u" ? "bg-gradient-to-r from-purple-900 to-indigo-900 text-white" : "text-slate-400"}`}
           >
             Custom M3U
-          </button>
-          <button 
-            onClick={() => setActiveTab("stalker")}
-            className={`cursor-pointer flex-1 py-1 px-1 rounded-lg text-[10px] font-semibold tracking-wide transition-all ${activeTab === "stalker" ? "bg-gradient-to-r from-purple-900 to-indigo-900 text-white" : "text-slate-400"}`}
-          >
-            Stalker
           </button>
           <button 
             onClick={() => setActiveTab("simulator")}
@@ -1237,94 +1294,6 @@ Load your personalized URL in any player (TiviMate, Kodi, Apple TV, VLC):
         )}
 
 
-
-        {/* Stalker Playlist Managing Tab */}
-        {activeTab === "stalker" && (
-          <div id="stalker_panel" className="bg-[#0b0d18] border border-slate-900 rounded-2xl p-6 flex flex-col gap-6 shadow-2xl">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-900/60 pb-5">
-              <div>
-                <h3 className="text-lg font-bold text-white tracking-tight flex items-center gap-2">
-                  <Shield className="w-5 h-5 text-purple-400" />
-                  <span>Stalker Playlist Management</span>
-                </h3>
-                <p className="text-xs text-slate-400 mt-1 uppercase font-mono tracking-wider">DEPLOY SECURED MULTI-TABS FOR STALKER IPTV FEEDS</p>
-              </div>
-              <div className="text-[10px] sm:text-xs font-mono text-emerald-400 bg-emerald-950/30 border border-emerald-500/20 px-3 py-1.5 rounded-lg flex items-center gap-1.5 shrink-0 uppercase font-bold">
-                <ShieldCheck className="w-3.5 h-3.5" />
-                <span>High Security Protocol</span>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-              <div className="lg:col-span-1">
-                <div className="flex flex-col gap-4">
-                  <div className="bg-[#08090f] p-4 rounded-xl border border-slate-900 flex flex-col gap-4">
-                    <h4 className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2">
-                       STALKER SOURCE URL
-                    </h4>
-                    <div className="flex flex-col gap-4">
-                      <div className="flex flex-col gap-1.5">
-                        <input 
-                          type="url" 
-                          placeholder="https://.../stalker.m3u8"
-                          value={stalkerSourceUrl}
-                          onChange={(e) => setStalkerSourceUrl(e.target.value)}
-                          className="w-full bg-[#0d101a] border border-slate-800 rounded-lg px-3 py-2 text-xs text-white outline-none focus:border-purple-600 transition-all font-mono"
-                        />
-                      </div>
-                      <label className="flex items-center gap-2 cursor-pointer">
-                        <input 
-                          type="checkbox"
-                          checked={stalkerAutoRefresh}
-                          onChange={(e) => setStalkerAutoRefresh(e.target.checked)}
-                          className="w-4 h-4 rounded text-purple-600 bg-black border-slate-800 focus:ring-purple-600 focus:ring-offset-black"
-                        />
-                        <span className="text-[10px] font-bold text-slate-400 uppercase">Auto-refresh (1 hour)</span>
-                      </label>
-                    </div>
-
-                    <div className="mt-2">
-                       <button
-                         onClick={fetchStalkerSource}
-                         disabled={loadingStalker}
-                         className="cursor-pointer w-full bg-purple-600 hover:bg-purple-500 disabled:opacity-50 text-white font-bold py-2.5 rounded-xl text-[10px] uppercase tracking-widest transition-all shadow-lg shadow-purple-900/20 flex items-center justify-center gap-2"
-                       >
-                         {loadingStalker ? <RefreshCw className="w-3.5 h-3.5 animate-spin"/> : <RefreshCw className="w-3.5 h-3.5"/>}
-                         {loadingStalker ? "Fetching..." : "Fetch Now"}
-                       </button>
-                    </div>
-                  </div>
-
-                  {stalkerError && (
-                    <div className="bg-rose-950/30 border border-rose-500/20 text-rose-400 p-4 rounded-xl text-[10px] font-bold flex items-center gap-2 animate-in fade-in slide-in-from-top-1">
-                      <ShieldAlert className="w-4 h-4" /> {stalkerError}
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              <div className="lg:col-span-2">
-                <div className="flex flex-col gap-4">
-                  {loadingStalker ? (
-                    <div className="flex items-center justify-center py-10 text-slate-500 gap-3">
-                      <RefreshCw className="w-6 h-6 animate-spin text-purple-600/50" />
-                      <span className="text-[10px] uppercase font-bold tracking-widest">Synchronizing...</span>
-                    </div>
-                  ) : stalkerContent.length === 0 ? (
-                    <div className="text-center py-10">
-                      <Terminal className="w-8 h-8 text-slate-800 mx-auto mb-3" />
-                      <p className="text-[10px] text-slate-600 uppercase font-bold tracking-widest">NO DATA LOADED</p>
-                    </div>
-                  ) : (
-                    <div className="text-[10px] text-slate-300 font-mono p-4 bg-[#08090f] border border-slate-900 rounded-xl">
-                      Synced {stalkerContent.length} items.
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
 
         {/* Custom M3U Playlists Managing Tab */}
         {activeTab === "custom_m3u" && (
