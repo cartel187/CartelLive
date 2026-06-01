@@ -154,7 +154,7 @@ function cleanGroupTitle(group: string, isOriginalJio: boolean): string {
   let g = group.trim();
   const lower = g.toLowerCase();
 
-  if (g === "sonyliv s2" || g.startsWith("jios3")) {
+  if (g === "sonyliv s2" || g.startsWith("jios2")) {
     return g;
   }
 
@@ -198,7 +198,7 @@ function getGroupLogo(groupName: string): string {
   const g = groupName.toLowerCase();
   if (g.includes("sonyliv s2"))
     return "https://ik.imagekit.io/yjtx9nh9y/sony-liv-logo-hd.png?updatedAt=1777812797381";
-  if (g.includes("jios3"))
+  if (g.includes("jios2"))
     return "https://ik.imagekit.io/yjtx9nh9y/Jio-TV-Logo.png?updatedAt=1777823901229";
 
   if (g.includes("fancode") || g.includes("𝗳𝗮𝗻𝗰𝗼𝗱𝗲"))
@@ -911,9 +911,9 @@ async function buildExtraPlaylists(): Promise<string> {
 
         // Branding re-mapping only where explicitly requested or needed for renaming
         if (groupLower.includes("jio ⭕")) {
-          // Replace both "JIO ⭕|" and "JIO ⭕" with "JioS3 "
+          // Replace both "JIO ⭕|" and "JIO ⭕" with "JioS2 "
           groupTitle = groupTitle
-            .replace(/JIO\s*⭕\s*\|?/gi, "JioS3 ")
+            .replace(/JIO\s*⭕\s*\|?/gi, "JioS2 ")
             .replace(/\s+/g, " ")
             .trim();
           groupLogo =
