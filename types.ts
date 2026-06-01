@@ -14,6 +14,23 @@ export interface ChannelItem {
   name: string;
   mpd: string;
   logo: string;
+  groupTitle?: string;
+}
+
+export interface CustomPlaylist {
+  id: string;
+  name: string;
+  url: string;
+  logo?: string;
+  enabled?: boolean;
+}
+
+export interface StalkerPlaylist {
+  id: string;
+  name: string;
+  url: string;
+  logo?: string;
+  enabled?: boolean;
 }
 
 export interface ServerStats {
@@ -33,12 +50,4 @@ export interface SimulationResult {
   details: string;
   rawResponseHeader?: string;
   playlistSnippet?: string;
-}
-
-export interface CustomPlaylist {
-  id?: string;
-  name: string;
-  url: string;
-  logo?: string;
-  enabled?: boolean;
 }
