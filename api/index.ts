@@ -1086,18 +1086,24 @@ async function parseM3uUrl(url: string) {
   }
 }
 
-import { initializeApp } from 'firebase/app';
-import { getFirestore, collection, addDoc, getDocs, doc, deleteDoc, updateDoc, query, where, getDoc, setDoc } from 'firebase/firestore';
+import * as admin from 'firebase-admin';
+import { getFirestore } from 'firebase-admin/firestore';
 import firebaseConfig from '../firebase-applet-config.json';
 
-const firebaseApp = initializeApp(firebaseConfig);
-const db = getFirestore(firebaseApp, (firebaseConfig as any).firestoreDatabaseId);
+// Initialize Firebase Admin
+if (!admin.apps.length) {
+  admin.initializeApp({
+    credential: admin.credential.applicationDefault(),
+  });
+}
+
+const db = getFirestore(admin.app(), (firebaseConfig as any).firestoreDatabaseId);
 
 const STALKER_TOKEN = "cartelstalk";
 
 async function fetchStalkerPlaylists(): Promise<any[]> {
   try {
-    const querySnapshot = await getDocs(collection(db, "stalkerPlaylists"));
+    const querySnapshot = await db.collection("stalkerPlaylists").get();
     return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
   } catch (err) {
     console.error("Error reading stalker_playlists from Firestore", err);
@@ -1897,9 +1903,9 @@ router.post("/stalker-playlists", express.json(), async (req, res) => {
   try {
     const playlistData = { name, url, logo, enabled: enabled !== false };
     if (id) {
-      await setDoc(doc(db, "stalkerPlaylists", id), playlistData, { merge: true });
+      await db.collection("stalkerPlaylists").doc(id).set(playlistData, { merge: true });
     } else {
-      await addDoc(collection(db, "stalkerPlaylists"), playlistData);
+      await db.collection("stalkerPlaylists").add(playlistData);
     }
     const playlists = await fetchStalkerPlaylists();
     return res.json({ success: true, playlists });
@@ -1911,7 +1917,7 @@ router.post("/stalker-playlists", express.json(), async (req, res) => {
 router.delete("/stalker-playlists/:id", async (req, res) => {
   const { id } = req.params;
   try {
-    await deleteDoc(doc(db, "stalkerPlaylists", id));
+    await db.collection("stalkerPlaylists").doc(id).delete();
     return res.json({ success: true, message: "Stalker playlist deleted successfully" });
   } catch (err: any) {
     return res.status(500).json({ success: false, error: err.message });
