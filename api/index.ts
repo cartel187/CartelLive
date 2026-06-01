@@ -1952,8 +1952,8 @@ const stalkerExportHandler = async (req: express.Request, res: express.Response)
     const processedLines = lines.map(line => {
       const tLine = line.trim();
       if (tLine.startsWith("http")) {
-        // Wrap with our play proxy
-        return `${host}/play?url=${encodeURIComponent(tLine)}`;
+        // Use existing helper to properly wrap with our proxy, including modifiers
+        return wrapStreamUrl(tLine, host);
       }
       return line;
     });
