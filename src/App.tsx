@@ -24,9 +24,11 @@ import {
   FileCode,
   CheckCircle2,
   Eye,
-  EyeOff
+  EyeOff,
+  Globe,
+  LayoutPanelLeft
 } from "lucide-react";
-import { GuardConfig, ChannelItem, ServerStats, SimulationResult, CustomPlaylist } from "./types";
+import { GuardConfig, ChannelItem, ServerStats, SimulationResult, CustomPlaylist, StalkerPlaylist } from "./types";
 
 export default function App() {
   // Config state
@@ -68,9 +70,21 @@ export default function App() {
   const [simulating, setSimulating] = useState(false);
 
   // UI state
-  const [activeTab, setActiveTab] = useState<"dashboard" | "channels" | "custom_m3u" | "simulator">("dashboard");
+  const [activeTab, setActiveTab] = useState<"dashboard" | "channels" | "custom_m3u" | "stalker" | "simulator">("dashboard");
   const [copiedUrl, setCopiedUrl] = useState(false);
+  const [copiedStalkerUrl, setCopiedStalkerUrl] = useState<string | null>(null);
   const [currentOrigin, setCurrentOrigin] = useState("https://your-domain.vercel.app");
+
+  // Stalker Playlists states
+  const [stalkerPlaylists, setStalkerPlaylists] = useState<StalkerPlaylist[]>([]);
+  const [loadingStalker, setLoadingStalker] = useState(false);
+  const [stalkerError, setStalkerError] = useState<string | null>(null);
+  const [newStalkerName, setNewStalkerName] = useState("");
+  const [newStalkerUrl, setNewStalkerUrl] = useState("");
+  const [newStalkerLogo, setNewStalkerLogo] = useState("");
+  const [editingStalkerId, setEditingStalkerId] = useState<string | null>(null);
+  const [addingStalker, setAddingStalker] = useState(false);
+  const [stalkerSuccessMessage, setStalkerSuccessMessage] = useState<string | null>(null);
 
   // Custom M3U Playlists states
   const [customPlaylists, setCustomPlaylists] = useState<CustomPlaylist[]>([]);
@@ -193,6 +207,76 @@ export default function App() {
     setNewPlaylistLogo("");
   };
 
+  // Stalker Playlist logic
+  const fetchStalkerPlaylists = async () => {
+    setLoadingStalker(true);
+    setStalkerError(null);
+    try {
+      const response = await fetch("/api/stalker-playlists");
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success) {
+          setStalkerPlaylists(data.playlists || []);
+        } else {
+          setStalkerError(data.error || "Failed to load stalker playlists");
+        }
+      }
+    } catch (e: any) {
+      setStalkerError(e.message || "Network error loading stalker playlists");
+    } finally {
+      setLoadingStalker(false);
+    }
+  };
+
+  const handleSaveStalker = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newStalkerName.trim() || !newStalkerUrl.trim()) return;
+    setAddingStalker(true);
+    setStalkerError(null);
+    try {
+      const body: any = {
+        name: newStalkerName.trim(),
+        url: newStalkerUrl.trim(),
+        logo: newStalkerLogo.trim() || undefined
+      };
+      if (editingStalkerId) body.id = editingStalkerId;
+      
+      const response = await fetch("/api/stalker-playlists", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body)
+      });
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success) {
+          setStalkerPlaylists(data.playlists || []);
+          setNewStalkerName("");
+          setNewStalkerUrl("");
+          setNewStalkerLogo("");
+          setEditingStalkerId(null);
+          setStalkerSuccessMessage("Playlist updated successfully!");
+          setTimeout(() => setStalkerSuccessMessage(null), 3500);
+        }
+      }
+    } catch (e: any) {
+      setStalkerError(e.message);
+    } finally {
+      setAddingStalker(false);
+    }
+  };
+
+  const handleDeleteStalker = async (id: string) => {
+    if (!window.confirm("Delete this Stalker playlist?")) return;
+    try {
+      const response = await fetch(`/api/stalker-playlists/${id}`, { method: "DELETE" });
+      if (response.ok) {
+        setStalkerPlaylists(prev => prev.filter(p => p.id !== id));
+      }
+    } catch (e: any) {
+      setStalkerError(e.message);
+    }
+  };
+
   // Code visualizer Tab details removed
 
   // Fetch current backend configuration
@@ -244,6 +328,7 @@ export default function App() {
     fetchConfig();
     fetchChannels();
     fetchCustomPlaylists();
+    fetchStalkerPlaylists();
     
     // Auto-fetch every 1 hour (3600000 ms)
     const interval = setInterval(() => {
@@ -624,6 +709,12 @@ Load your personalized URL in any player (TiviMate, Kodi, Apple TV, VLC):
             Custom M3U ({customPlaylists.length})
           </button>
           <button 
+            onClick={() => setActiveTab("stalker")}
+            className={`cursor-pointer px-4 py-1.5 rounded-lg text-xs font-semibold tracking-wide transition-all ${activeTab === "stalker" ? "bg-gradient-to-r from-purple-900/80 to-indigo-900/80 text-white shadow-md shadow-black/40 border border-purple-500/10" : "text-slate-400 hover:text-white"}`}
+          >
+            Stalker Playlist ({stalkerPlaylists.length})
+          </button>
+          <button 
             onClick={() => setActiveTab("simulator")}
             className={`cursor-pointer px-4 py-1.5 rounded-lg text-xs font-semibold tracking-wide transition-all ${activeTab === "simulator" ? "bg-gradient-to-r from-purple-900/80 to-indigo-900/80 text-white shadow-md shadow-black/40 border border-purple-500/10" : "text-slate-400 hover:text-white"}`}
           >
@@ -701,6 +792,12 @@ Load your personalized URL in any player (TiviMate, Kodi, Apple TV, VLC):
             className={`cursor-pointer flex-1 py-1 px-1 rounded-lg text-[10px] font-semibold tracking-wide transition-all ${activeTab === "custom_m3u" ? "bg-gradient-to-r from-purple-900 to-indigo-900 text-white" : "text-slate-400"}`}
           >
             Custom M3U
+          </button>
+          <button 
+            onClick={() => setActiveTab("stalker")}
+            className={`cursor-pointer flex-1 py-1 px-1 rounded-lg text-[10px] font-semibold tracking-wide transition-all ${activeTab === "stalker" ? "bg-gradient-to-r from-purple-900 to-indigo-900 text-white" : "text-slate-400"}`}
+          >
+            Stalker
           </button>
           <button 
             onClick={() => setActiveTab("simulator")}
@@ -1294,6 +1391,193 @@ Load your personalized URL in any player (TiviMate, Kodi, Apple TV, VLC):
         )}
 
 
+
+        {/* Stalker Playlist Managing Tab */}
+        {activeTab === "stalker" && (
+          <div id="stalker_panel" className="bg-[#0b0d18] border border-slate-900 rounded-2xl p-6 flex flex-col gap-6 shadow-2xl">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-900/60 pb-5">
+              <div>
+                <h3 className="text-lg font-bold text-white tracking-tight flex items-center gap-2">
+                  <Shield className="w-5 h-5 text-purple-400" />
+                  <span>Stalker Playlist Management</span>
+                </h3>
+                <p className="text-xs text-slate-400 mt-1 uppercase font-mono tracking-wider">DEPLOY SECURED MULTI-TABS FOR STALKER IPTV FEEDS</p>
+              </div>
+              <div className="text-[10px] sm:text-xs font-mono text-emerald-400 bg-emerald-950/30 border border-emerald-500/20 px-3 py-1.5 rounded-lg flex items-center gap-1.5 shrink-0 uppercase font-bold">
+                <ShieldCheck className="w-3.5 h-3.5" />
+                <span>High Security Protocol</span>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+              <div className="lg:col-span-1">
+                <form onSubmit={handleSaveStalker} className="flex flex-col gap-4">
+                  <div className="bg-[#08090f] p-4 rounded-xl border border-slate-900">
+                    <h4 className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-4">
+                      {editingStalkerId ? "MODIFY STALKER TAB" : "PROVISION NEW TAB"}
+                    </h4>
+                    
+                    <div className="flex flex-col gap-4">
+                      <div className="flex flex-col gap-1.5">
+                        <label className="text-[10px] font-bold text-slate-400 uppercase">Tab Name (Identity)</label>
+                        <input 
+                          type="text" 
+                          placeholder="e.g. Stalker 1"
+                          value={newStalkerName}
+                          onChange={(e) => setNewStalkerName(e.target.value)}
+                          className="w-full bg-[#0d101a] border border-slate-800 rounded-lg px-3 py-2 text-xs text-white outline-none focus:border-purple-600 transition-all font-medium"
+                        />
+                      </div>
+                      <div className="flex flex-col gap-1.5">
+                        <label className="text-[10px] font-bold text-slate-400 uppercase">Input M3U/M3U8 Source URL</label>
+                        <div className="relative">
+                          <input 
+                            type="url" 
+                            placeholder="https://.../stalker.m3u8"
+                            value={newStalkerUrl}
+                            onChange={(e) => setNewStalkerUrl(e.target.value)}
+                            className="w-full bg-[#0d101a] border border-slate-800 rounded-lg px-3 py-2 text-xs text-white outline-none focus:border-purple-600 pr-8 transition-all font-mono"
+                          />
+                          <Lock className="absolute right-2.5 top-2.5 w-3.5 h-3.5 text-slate-600" />
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="mt-6 flex flex-col gap-2">
+                       <button
+                         type="submit"
+                         disabled={addingStalker}
+                         className="cursor-pointer w-full bg-purple-600 hover:bg-purple-500 disabled:opacity-50 text-white font-bold py-2.5 rounded-xl text-[10px] uppercase tracking-widest transition-all shadow-lg shadow-purple-900/20 flex items-center justify-center gap-2"
+                       >
+                         {addingStalker ? <RefreshCw className="w-3.5 h-3.5 animate-spin"/> : (editingStalkerId ? <Check className="w-3.5 h-3.5"/> : <Send className="w-3.5 h-3.5"/>)}
+                         {editingStalkerId ? "Commit Changes" : "Deploy Logic"}
+                       </button>
+                       {editingStalkerId && (
+                         <button
+                           type="button"
+                           onClick={() => {
+                             setEditingStalkerId(null);
+                             setNewStalkerName("");
+                             setNewStalkerUrl("");
+                           }}
+                           className="cursor-pointer w-full bg-[#131627] hover:bg-[#1a1f38] text-slate-400 py-2.5 rounded-xl text-[10px] uppercase font-bold transition-all border border-slate-800"
+                         >
+                           Discard
+                         </button>
+                       )}
+                    </div>
+                  </div>
+
+                  {stalkerSuccessMessage && (
+                    <div className="bg-emerald-950/30 border border-emerald-500/20 text-emerald-400 p-4 rounded-xl text-[10px] font-bold flex items-center gap-2 animate-in fade-in slide-in-from-top-1">
+                      <CheckCircle2 className="w-4 h-4" /> {stalkerSuccessMessage}
+                    </div>
+                  )}
+                  {stalkerError && (
+                    <div className="bg-rose-950/30 border border-rose-500/20 text-rose-400 p-4 rounded-xl text-[10px] font-bold flex items-center gap-2 animate-in fade-in slide-in-from-top-1">
+                      <ShieldAlert className="w-4 h-4" /> {stalkerError}
+                    </div>
+                  )}
+                </form>
+              </div>
+
+              <div className="lg:col-span-2">
+                <div className="flex flex-col gap-4">
+                  {loadingStalker ? (
+                    <div className="flex flex-col items-center justify-center py-20 text-slate-500 gap-3">
+                      <RefreshCw className="w-8 h-8 animate-spin text-purple-600/50" />
+                      <span className="text-[10px] uppercase font-bold tracking-widest">Synchronizing Encrypted Data...</span>
+                    </div>
+                  ) : stalkerPlaylists.length === 0 ? (
+                    <div className="bg-[#08090f] border border-dashed border-slate-800 rounded-2xl p-16 text-center shadow-inner">
+                      <Terminal className="w-10 h-10 text-slate-700 mx-auto mb-4" />
+                      <h4 className="text-sm font-bold text-slate-300">No Stalker Tabs Detected</h4>
+                      <p className="text-[10px] text-slate-500 mt-1 max-w-[240px] mx-auto leading-relaxed">Provision independent stalker tabs to distribute high-security m3u feeds with dynamic proxying logic.</p>
+                    </div>
+                  ) : (
+                    stalkerPlaylists.map((p) => {
+                      const stalkerExport = `${currentOrigin}/api/stalker-export/${p.id}?token=cartelstalk`;
+                      return (
+                        <div key={p.id} className="bg-[#08090f] border border-slate-900 rounded-2xl p-6 hover:border-slate-800 transition-all flex flex-col gap-5 shadow-lg group">
+                          <div className="flex items-start justify-between gap-4">
+                            <div className="flex items-center gap-4">
+                              <div className="h-12 w-12 flex items-center justify-center bg-gradient-to-br from-purple-900/40 to-indigo-900/40 border border-purple-500/20 text-purple-400 rounded-2xl shadow-lg">
+                                <Send className="w-6 h-6" />
+                              </div>
+                              <div>
+                                <h4 className="text-base font-bold text-white tracking-tight">{p.name}</h4>
+                                <div className="flex items-center gap-3 mt-1">
+                                  <span className="flex items-center gap-1.5 text-[10px] text-slate-500 font-mono italic">
+                                    <Globe className="w-3 h-3" />
+                                    {p.url && p.url.length > 40 ? p.url.slice(0, 40) + "..." : p.url}
+                                  </span>
+                                  <span className="text-[9px] px-2 py-0.5 bg-indigo-900/30 text-indigo-400 border border-indigo-500/20 rounded-full uppercase font-bold">Stalker v1.0</span>
+                                </div>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <button 
+                                onClick={() => {
+                                  setEditingStalkerId(p.id);
+                                  setNewStalkerName(p.name);
+                                  setNewStalkerUrl(p.url);
+                                  window.scrollTo({ top: 0, behavior: "smooth" });
+                                }}
+                                className="cursor-pointer bg-[#131627] hover:bg-slate-800 text-slate-400 hover:text-white p-2.5 rounded-xl border border-slate-800 transition-all"
+                                title="Settings"
+                              >
+                                <Settings className="w-4 h-4" />
+                              </button>
+                              <button 
+                                onClick={() => handleDeleteStalker(p.id)}
+                                className="cursor-pointer bg-[#131627] hover:bg-rose-900/20 text-slate-400 hover:text-rose-400 p-2.5 rounded-xl border border-slate-800 transition-all"
+                                title="Destroy Tab"
+                              >
+                                <Terminal className="w-4 h-4" />
+                              </button>
+                            </div>
+                          </div>
+
+                          <div className="bg-[#05060a] border border-slate-800/80 rounded-2xl p-4 flex flex-col gap-3 shadow-inner">
+                             <div className="flex items-center justify-between gap-3">
+                                <div className="flex items-center gap-2">
+                                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                                  <span className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">ACTIVE SECURITY WRAPPER URL</span>
+                                </div>
+                                <span className="text-[9px] text-purple-400/80 font-mono tracking-tight font-bold px-2 py-0.5 bg-purple-900/10 border border-purple-500/10 rounded">CARTEL-STALK-TOKEN</span>
+                             </div>
+                             
+                             <div className="flex items-center gap-2">
+                                <div className="flex-1 overflow-hidden">
+                                  <p className="text-[10px] font-mono text-purple-300 truncate bg-[#0d0f1a] px-3 py-2.5 rounded-xl border border-slate-900/80 select-all">{stalkerExport}</p>
+                                </div>
+                                <button 
+                                  onClick={() => {
+                                    navigator.clipboard.writeText(stalkerExport);
+                                    setCopiedStalkerUrl(p.id);
+                                    setTimeout(() => setCopiedStalkerUrl(null), 2000);
+                                  }}
+                                  className="cursor-pointer h-[38px] bg-indigo-600 hover:bg-indigo-500 text-white px-4 rounded-xl shadow-lg shadow-indigo-900/20 transition-all flex items-center justify-center shrink-0"
+                                >
+                                  {copiedStalkerUrl === p.id ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+                                </button>
+                             </div>
+                             <div className="flex items-start gap-2 bg-indigo-950/10 border border-indigo-500/5 p-3 rounded-xl mt-1">
+                                <Info className="w-4 h-4 text-indigo-400 shrink-0 mt-0.5" />
+                                <p className="text-[10px] text-slate-400 leading-relaxed italic">
+                                  Access code: <span className="text-indigo-400 font-bold">cartelstalk</span>. This playlist is isolated from main feed. All inner stream sources are forcefully routed via the secure redirection engine to prevent raw IP leaks.
+                                </p>
+                             </div>
+                          </div>
+                        </div>
+                      )
+                    })
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Custom M3U Playlists Managing Tab */}
         {activeTab === "custom_m3u" && (
