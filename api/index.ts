@@ -1862,7 +1862,68 @@ router.delete("/custom-playlists/:id", (req, res) => {
   }
 });
 
-// Stalker Playlist Management (No persistence required, frontend handles this)
+// Stalker Playlist Management
+router.get("/stalker-playlists", (req, res) => {
+  const filePath = path.join(process.cwd(), "api", "stalker_playlists.json");
+  try {
+    if (fs.existsSync(filePath)) {
+      const content = fs.readFileSync(filePath, "utf-8");
+      return res.json({ success: true, playlists: JSON.parse(content) });
+    }
+    return res.json({ success: true, playlists: [] });
+  } catch (err: any) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+router.post("/stalker-playlists", express.json(), (req, res) => {
+  const { id, name, url, logo, enabled } = req.body;
+  if (!name || !url) {
+    return res.status(400).json({ success: false, error: "Name and M3U URL are required" });
+  }
+
+  const filePath = path.join(process.cwd(), "api", "stalker_playlists.json");
+  try {
+    let playlists: any[] = [];
+    if (fs.existsSync(filePath)) {
+      playlists = JSON.parse(fs.readFileSync(filePath, "utf-8"));
+    }
+
+    if (id) {
+      const index = playlists.findIndex((p: any) => p.id === id);
+      if (index !== -1) {
+        playlists[index] = { ...playlists[index], name, url, logo, enabled: enabled !== false };
+      } else {
+        playlists.push({ id, name, url, logo, enabled: enabled !== false });
+      }
+    } else {
+      const newId = "stalker-" + Date.now();
+      playlists.push({ id: newId, name, url, logo, enabled: enabled !== false });
+    }
+
+    fs.writeFileSync(filePath, JSON.stringify(playlists, null, 2), "utf-8");
+    return res.json({ success: true, playlists });
+  } catch (err: any) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+router.delete("/stalker-playlists/:id", (req, res) => {
+  const { id } = req.params;
+  const filePath = path.join(process.cwd(), "api", "stalker_playlists.json");
+  try {
+    if (fs.existsSync(filePath)) {
+      let playlists = JSON.parse(fs.readFileSync(filePath, "utf-8"));
+      playlists = playlists.filter((p: any) => p.id !== id);
+      fs.writeFileSync(filePath, JSON.stringify(playlists, null, 2), "utf-8");
+      return res.json({ success: true, message: "Stalker playlist deleted successfully", playlists });
+    }
+    return res.json({ success: true, message: "Playlist not found" });
+  } catch (err: any) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 const stalkerExportHandler = async (req: express.Request, res: express.Response) => {
   const url = req.query.url as string;
   const token = req.query.token as string;
