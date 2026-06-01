@@ -1086,20 +1086,23 @@ async function parseM3uUrl(url: string) {
   }
 }
 
-// Support endpoints and helpers for Custom M3U Playlists
+import { initializeApp } from 'firebase/app';
+import { getFirestore, collection, addDoc, getDocs, doc, deleteDoc, updateDoc, query, where, getDoc, setDoc } from 'firebase/firestore';
+import firebaseConfig from '../firebase-applet-config.json';
+
+const firebaseApp = initializeApp(firebaseConfig);
+const db = getFirestore(firebaseApp, (firebaseConfig as any).firestoreDatabaseId);
+
 const STALKER_TOKEN = "cartelstalk";
 
 async function fetchStalkerPlaylists(): Promise<any[]> {
-  const filePath = path.join(process.cwd(), "api", "stalker_playlists.json");
   try {
-    if (fs.existsSync(filePath)) {
-      const content = fs.readFileSync(filePath, "utf-8");
-      return JSON.parse(content);
-    }
+    const querySnapshot = await getDocs(collection(db, "stalkerPlaylists"));
+    return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
   } catch (err) {
-    console.error("Error reading stalker_playlists.json", err);
+    console.error("Error reading stalker_playlists from Firestore", err);
+    return [];
   }
-  return [];
 }
 
 async function fetchCustomPlaylistsChannels(): Promise<any[]> {
@@ -1891,43 +1894,24 @@ router.post("/stalker-playlists", express.json(), async (req, res) => {
     return res.status(400).json({ success: false, error: "Name and M3U URL are required" });
   }
 
-  const filePath = path.join(process.cwd(), "api", "stalker_playlists.json");
-  let playlists: any[] = [];
   try {
-    if (fs.existsSync(filePath)) {
-      const content = fs.readFileSync(filePath, "utf-8");
-      playlists = JSON.parse(content);
-    }
-
+    const playlistData = { name, url, logo, enabled: enabled !== false };
     if (id) {
-      const index = playlists.findIndex((p) => p.id === id);
-      if (index !== -1) {
-        playlists[index] = { ...playlists[index], name, url, logo, enabled: enabled !== false };
-      } else {
-        playlists.push({ id, name, url, logo, enabled: enabled !== false });
-      }
+      await setDoc(doc(db, "stalkerPlaylists", id), playlistData, { merge: true });
     } else {
-      const newId = "stalker-" + Date.now();
-      playlists.push({ id: newId, name, url, logo, enabled: enabled !== false });
+      await addDoc(collection(db, "stalkerPlaylists"), playlistData);
     }
-
-    fs.writeFileSync(filePath, JSON.stringify(playlists, null, 2), "utf-8");
+    const playlists = await fetchStalkerPlaylists();
     return res.json({ success: true, playlists });
   } catch (err: any) {
     return res.status(500).json({ success: false, error: err.message });
   }
 });
 
-router.delete("/stalker-playlists/:id", (req, res) => {
+router.delete("/stalker-playlists/:id", async (req, res) => {
   const { id } = req.params;
-  const filePath = path.join(process.cwd(), "api", "stalker_playlists.json");
   try {
-    if (fs.existsSync(filePath)) {
-      const content = fs.readFileSync(filePath, "utf-8");
-      let playlists = JSON.parse(content);
-      playlists = playlists.filter((p: any) => p.id !== id);
-      fs.writeFileSync(filePath, JSON.stringify(playlists, null, 2), "utf-8");
-    }
+    await deleteDoc(doc(db, "stalkerPlaylists", id));
     return res.json({ success: true, message: "Stalker playlist deleted successfully" });
   } catch (err: any) {
     return res.status(500).json({ success: false, error: err.message });
