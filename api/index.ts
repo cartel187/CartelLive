@@ -1087,6 +1087,21 @@ async function parseM3uUrl(url: string) {
 }
 
 // Support endpoints and helpers for Custom M3U Playlists
+const STALKER_TOKEN = "cartelstalk";
+
+async function fetchStalkerPlaylists(): Promise<any[]> {
+  const filePath = path.join(process.cwd(), "api", "stalker_playlists.json");
+  try {
+    if (fs.existsSync(filePath)) {
+      const content = fs.readFileSync(filePath, "utf-8");
+      return JSON.parse(content);
+    }
+  } catch (err) {
+    console.error("Error reading stalker_playlists.json", err);
+  }
+  return [];
+}
+
 async function fetchCustomPlaylistsChannels(): Promise<any[]> {
   const filePath = path.join(process.cwd(), "api", "custom_playlists.json");
   let playlists: any[] = [];
@@ -1859,6 +1874,112 @@ router.delete("/custom-playlists/:id", (req, res) => {
     return res.status(500).json({ success: false, error: err.message });
   }
 });
+
+// Stalker Playlist Management
+router.get("/stalker-playlists", async (req, res) => {
+  try {
+    const playlists = await fetchStalkerPlaylists();
+    res.json({ success: true, playlists });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+router.post("/stalker-playlists", express.json(), async (req, res) => {
+  const { id, name, url, logo, enabled } = req.body;
+  if (!name || !url) {
+    return res.status(400).json({ success: false, error: "Name and M3U URL are required" });
+  }
+
+  const filePath = path.join(process.cwd(), "api", "stalker_playlists.json");
+  let playlists: any[] = [];
+  try {
+    if (fs.existsSync(filePath)) {
+      const content = fs.readFileSync(filePath, "utf-8");
+      playlists = JSON.parse(content);
+    }
+
+    if (id) {
+      const index = playlists.findIndex((p) => p.id === id);
+      if (index !== -1) {
+        playlists[index] = { ...playlists[index], name, url, logo, enabled: enabled !== false };
+      } else {
+        playlists.push({ id, name, url, logo, enabled: enabled !== false });
+      }
+    } else {
+      const newId = "stalker-" + Date.now();
+      playlists.push({ id: newId, name, url, logo, enabled: enabled !== false });
+    }
+
+    fs.writeFileSync(filePath, JSON.stringify(playlists, null, 2), "utf-8");
+    return res.json({ success: true, playlists });
+  } catch (err: any) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+router.delete("/stalker-playlists/:id", (req, res) => {
+  const { id } = req.params;
+  const filePath = path.join(process.cwd(), "api", "stalker_playlists.json");
+  try {
+    if (fs.existsSync(filePath)) {
+      const content = fs.readFileSync(filePath, "utf-8");
+      let playlists = JSON.parse(content);
+      playlists = playlists.filter((p: any) => p.id !== id);
+      fs.writeFileSync(filePath, JSON.stringify(playlists, null, 2), "utf-8");
+    }
+    return res.json({ success: true, message: "Stalker playlist deleted successfully" });
+  } catch (err: any) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+const stalkerExportHandler = async (req: express.Request, res: express.Response) => {
+  const { id } = req.params;
+  const token = req.query.token as string;
+
+  if (token !== STALKER_TOKEN) {
+    return res.redirect(302, config.telegramUrl);
+  }
+
+  try {
+    const playlists = await fetchStalkerPlaylists();
+    const playlist = playlists.find(p => p.id === id);
+
+    if (!playlist || !playlist.url) {
+      return res.status(404).send("#EXTM3U\n# Stalker playlist not found or disabled");
+    }
+
+    const response = await fetch(playlist.url, {
+      headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36" }
+    });
+    
+    if (!response.ok) throw new Error("Failed to fetch source playlist");
+    
+    let text = await response.text();
+    const protocol = req.protocol === "https" || req.headers["x-forwarded-proto"] === "https" ? "https" : "http";
+    const host = `${protocol}://${req.get("host")}`;
+
+    // Apply security wrapper to all URLs in the stalker playlist
+    const lines = text.split(/\r?\n/);
+    const processedLines = lines.map(line => {
+      const tLine = line.trim();
+      if (tLine.startsWith("http")) {
+        // Wrap with our play proxy
+        return `${host}/play?url=${encodeURIComponent(tLine)}`;
+      }
+      return line;
+    });
+
+    res.setHeader("Content-Type", "application/x-mpegurl");
+    res.setHeader("Content-Disposition", `inline; filename="${playlist.name.replace(/[^a-z0-9]/gi, '_')}.m3u"`);
+    res.status(200).send(processedLines.join("\n"));
+  } catch (err: any) {
+    res.status(500).send(`#EXTM3U\n# Error: ${err.message}`);
+  }
+};
+
+router.get("/stalker-export/:id", stalkerExportHandler);
 
 // Channels list (for dashboard preview, does not output secret stream keys to browser unless authorized)
 router.get("/channels", async (req, res) => {
