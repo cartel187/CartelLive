@@ -1864,7 +1864,8 @@ router.delete("/custom-playlists/:id", (req, res) => {
 // Channels list (for dashboard preview, does not output secret stream keys to browser unless authorized)
 router.get("/channels", async (req, res) => {
   try {
-    const jioData = await fetchJioData();
+    const force = req.query.force === "true";
+    const jioData = await fetchJioData(force);
     if (!jioData || !jioData.livechannels) {
       return res
         .status(404)
