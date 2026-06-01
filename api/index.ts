@@ -1095,10 +1095,11 @@ import firebaseConfig from '../firebase-applet-config.json';
 if (!admin.apps.length) {
   admin.initializeApp({
     credential: admin.credential.applicationDefault(),
+    projectId: firebaseConfig.projectId,
   });
 }
 
-const db = getFirestore(admin.app(), (firebaseConfig as any).firestoreDatabaseId);
+const db = getFirestore(admin.app());
 
 const STALKER_TOKEN = "cartelstalk";
 
