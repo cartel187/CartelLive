@@ -212,17 +212,14 @@ export default function App() {
     setLoadingStalker(true);
     setStalkerError(null);
     try {
-      const response = await fetch("/api/stalker-playlists");
-      if (response.ok) {
-        const data = await response.json();
-        if (data.success) {
-          setStalkerPlaylists(data.playlists || []);
-        } else {
-          setStalkerError(data.error || "Failed to load stalker playlists");
-        }
+      const saved = localStorage.getItem("stalkerPlaylists");
+      if (saved) {
+        setStalkerPlaylists(JSON.parse(saved));
+      } else {
+        setStalkerPlaylists([]);
       }
     } catch (e: any) {
-      setStalkerError(e.message || "Network error loading stalker playlists");
+      setStalkerError("Error loading local stalker playlists");
     } finally {
       setLoadingStalker(false);
     }
@@ -231,54 +228,40 @@ export default function App() {
   const handleSaveStalker = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newStalkerName.trim() || !newStalkerUrl.trim()) return;
-    setAddingStalker(true);
-    setStalkerError(null);
     
-    try {
-      const body: any = {
-        name: newStalkerName.trim(),
-        url: newStalkerUrl.trim(),
-        logo: newStalkerLogo.trim() || undefined
-      };
-      if (editingStalkerId) body.id = editingStalkerId;
-      
-      const response = await fetch("/api/stalker-playlists", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body)
-      });
-      const data = await response.json();
-      if (response.ok && data.success) {
-        setStalkerPlaylists(data.playlists || []);
-        setNewStalkerName("");
-        setNewStalkerUrl("");
-        setNewStalkerLogo("");
-        setEditingStalkerId(null);
-        setStalkerSuccessMessage("Playlist updated successfully!");
-        setTimeout(() => setStalkerSuccessMessage(null), 3500);
-      } else {
-        throw new Error(data.error || "Failed to save playlist");
-      }
-    } catch (e: any) {
-      setStalkerError(e.message);
-    } finally {
-      setAddingStalker(false);
+    const newPlaylist = {
+      id: editingStalkerId || "stalker-" + Date.now(),
+      name: newStalkerName.trim(),
+      url: newStalkerUrl.trim(),
+      logo: newStalkerLogo.trim() || undefined,
+      enabled: true
+    };
+    
+    let updated: StalkerPlaylist[];
+    if (editingStalkerId) {
+      updated = stalkerPlaylists.map(p => p.id === editingStalkerId ? newPlaylist : p);
+    } else {
+      updated = [...stalkerPlaylists, newPlaylist];
     }
+    
+    setStalkerPlaylists(updated);
+    localStorage.setItem("stalkerPlaylists", JSON.stringify(updated));
+    
+    setNewStalkerName("");
+    setNewStalkerUrl("");
+    setNewStalkerLogo("");
+    setEditingStalkerId(null);
+    setStalkerSuccessMessage(editingStalkerId ? "Playlist updated successfully!" : "Playlist added successfully!");
+    setTimeout(() => setStalkerSuccessMessage(null), 3500);
   };
 
   const handleDeleteStalker = async (id: string) => {
     if (!window.confirm("Delete this Stalker playlist?")) return;
-    try {
-      const response = await fetch(`/api/stalker-playlists/${id}`, { method: "DELETE" });
-      if (response.ok) {
-        const data = await response.json();
-        setStalkerPlaylists(data.playlists || []);
-        setStalkerSuccessMessage("Playlist deleted successfully.");
-        setTimeout(() => setStalkerSuccessMessage(null), 3000);
-      }
-    } catch (e: any) {
-      setStalkerError(e.message);
-    }
+    const updated = stalkerPlaylists.filter(p => p.id !== id);
+    setStalkerPlaylists(updated);
+    localStorage.setItem("stalkerPlaylists", JSON.stringify(updated));
+    setStalkerSuccessMessage("Playlist deleted successfully.");
+    setTimeout(() => setStalkerSuccessMessage(null), 3000);
   };
 
   // Code visualizer Tab details removed
