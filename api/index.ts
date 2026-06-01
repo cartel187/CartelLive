@@ -146,7 +146,7 @@ function getChannelCategory(name: string): string {
   } else if (nom.includes("news") || nom.includes("samachar")) {
     baseGroup = "News";
   }
-  return `JioS2 ${baseGroup}`;
+  return `${baseGroup}`;
 }
 
 // Ensure all categories are formatted correctly. JioS2 prefix is only for original JioTV channels
@@ -188,7 +188,7 @@ function cleanGroupTitle(group: string, isOriginalJio: boolean): string {
   else if (lower.includes("sports")) g = "Sports";
 
   if (isOriginalJio) {
-    return `JioS2 ${g}`;
+    return `${g}`;
   }
   return g;
 }
@@ -1458,7 +1458,6 @@ async function fetchJioData(force = false) {
     });
 
     baseJioData.livechannels = [
-      ...originalJio,
       ...scraperCombined,
       ...customProcessed,
     ];
