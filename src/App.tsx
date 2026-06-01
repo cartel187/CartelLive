@@ -246,17 +246,17 @@ export default function App() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body)
       });
-      if (response.ok) {
-        const data = await response.json();
-        if (data.success) {
-          setStalkerPlaylists(data.playlists || []);
-          setNewStalkerName("");
-          setNewStalkerUrl("");
-          setNewStalkerLogo("");
-          setEditingStalkerId(null);
-          setStalkerSuccessMessage("Playlist updated successfully!");
-          setTimeout(() => setStalkerSuccessMessage(null), 3500);
-        }
+      const data = await response.json();
+      if (response.ok && data.success) {
+        setStalkerPlaylists(data.playlists || []);
+        setNewStalkerName("");
+        setNewStalkerUrl("");
+        setNewStalkerLogo("");
+        setEditingStalkerId(null);
+        setStalkerSuccessMessage("Playlist updated successfully!");
+        setTimeout(() => setStalkerSuccessMessage(null), 3500);
+      } else {
+        throw new Error(data.error || "Failed to save playlist");
       }
     } catch (e: any) {
       setStalkerError(e.message);
