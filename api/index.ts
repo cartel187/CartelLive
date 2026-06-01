@@ -1090,7 +1090,7 @@ async function parseM3uUrl(url: string) {
 const STALKER_TOKEN = "cartelstalk";
 
 async function fetchStalkerPlaylists(): Promise<any[]> {
-  const filePath = "/stalker_playlists.json";
+  const filePath = path.join(process.cwd(), "api", "stalker_playlists.json");
   try {
     if (fs.existsSync(filePath)) {
       const content = fs.readFileSync(filePath, "utf-8");
@@ -1892,7 +1892,7 @@ router.post("/stalker-playlists", express.json(), (req, res) => {
     return res.status(400).json({ success: false, error: "Name and M3U URL are required" });
   }
 
-  const filePath = "/stalker_playlists.json";
+  const filePath = path.join(process.cwd(), "api", "stalker_playlists.json");
   try {
     let playlists: any[] = [];
     if (fs.existsSync(filePath)) {
@@ -1920,7 +1920,7 @@ router.post("/stalker-playlists", express.json(), (req, res) => {
 
 router.delete("/stalker-playlists/:id", (req, res) => {
   const { id } = req.params;
-  const filePath = "/stalker_playlists.json";
+  const filePath = path.join(process.cwd(), "api", "stalker_playlists.json");
   try {
     if (fs.existsSync(filePath)) {
       let playlists = JSON.parse(fs.readFileSync(filePath, "utf-8"));
