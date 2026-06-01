@@ -1948,15 +1948,7 @@ const stalkerExportHandler = async (req: express.Request, res: express.Response)
     const host = `${protocol}://${req.get("host")}`;
 
     // Apply security wrapper to all URLs in the stalker playlist
-    const lines = text.split(/\r?\n/);
-    const processedLines = lines.map(line => {
-      const tLine = line.trim();
-      if (tLine.startsWith("http")) {
-        // Use existing helper to properly wrap with our proxy, including modifiers
-        return wrapStreamUrl(tLine, host);
-      }
-      return line;
-    });
+    const processedLines = text.split(/\r?\n/);
 
     res.setHeader("Content-Type", "application/x-mpegurl");
     res.setHeader("Content-Disposition", `inline; filename="stalker_playlist.m3u"`);
