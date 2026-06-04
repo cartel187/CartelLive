@@ -1928,12 +1928,18 @@ router.post("/stalker-sync", express.json(), async (req, res) => {
 // Stalker playlist routing handler generating secure stream proxy links
 const stalkerPlaylistHandler = async (req: express.Request, res: express.Response) => {
   let id = req.params.id || "";
+  console.log('[Stalker] Request incoming:', { params: req.params, path: req.path, originalUrl: req.originalUrl });
+  if (id.endsWith(".m3u")) {
+    id = id.substring(0, id.length - 4);
+  }
+
   if (!id) {
-    const match = req.path.match(/stalker(\d+)/i);
+    const match = req.path.match(/stalker(\d+)/i) || req.originalUrl.match(/stalker(\d+)/i);
     if (match) {
       id = match[1];
     }
   }
+  console.log('[Stalker] Resolved Stalker ID:', id);
 
   const token = req.query.token as string;
   const item = stalkerCache[id];
