@@ -68,9 +68,105 @@ export default function App() {
   const [simulating, setSimulating] = useState(false);
 
   // UI state
-  const [activeTab, setActiveTab] = useState<"dashboard" | "channels" | "custom_m3u" | "simulator">("dashboard");
+  const [activeTab, setActiveTab] = useState<"dashboard" | "channels" | "custom_m3u" | "simulator" | "stalker">("dashboard");
   const [copiedUrl, setCopiedUrl] = useState(false);
   const [currentOrigin, setCurrentOrigin] = useState("https://your-domain.vercel.app");
+
+  // Stalker Portals Integration
+  interface StalkerItem {
+    id: string;
+    name: string;
+    url: string;
+    token: string;
+    channelsCount: number;
+    lastFetchedAt: string;
+    status: "active" | "error" | "pending";
+    error?: string;
+  }
+
+  const [stalkers, setStalkers] = useState<StalkerItem[]>([
+    { id: "1", name: "Stalker 1", url: "https://raw.githubusercontent.com/cartel187/CartelFlag/refs/heads/main/stalk.m3u", token: "cartelstalk1", channelsCount: 0, lastFetchedAt: "Never", status: "pending" },
+    { id: "2", name: "Stalker 2", url: "https://raw.githubusercontent.com/cartel187/CartelFlag/refs/heads/main/stalk2.m3u", token: "cartelstalk2", channelsCount: 0, lastFetchedAt: "Never", status: "pending" },
+    { id: "3", name: "Stalker 3", url: "https://raw.githubusercontent.com/cartel187/CartelFlag/refs/heads/main/stalk3.m3u", token: "cartelstalk3", channelsCount: 0, lastFetchedAt: "Never", status: "pending" },
+    { id: "4", name: "Stalker 4", url: "https://raw.githubusercontent.com/cartel187/CartelFlag/refs/heads/main/stalk4.m3u", token: "cartelstalk4", channelsCount: 0, lastFetchedAt: "Never", status: "pending" }
+  ]);
+  const [loadingStalkers, setLoadingStalkers] = useState<Record<string, boolean>>({});
+  const [stalkerAutoRefresh, setStalkerAutoRefresh] = useState(true);
+  const [stalkerFeedbackMsg, setStalkerFeedbackMsg] = useState<string | null>(null);
+  const [copiedStalkerId, setCopiedStalkerId] = useState<string | null>(null);
+
+  const fetchStalkerStats = async () => {
+    try {
+      const res = await fetch("/api/stalker-stats");
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success && data.stalkers) {
+          setStalkers(data.stalkers);
+        }
+      }
+    } catch (e) {
+      console.error("Error loading stalker stats:", e);
+    }
+  };
+
+  const syncStalker = async (id: string, silent = false) => {
+    if (!silent) {
+      setLoadingStalkers(prev => ({ ...prev, [id]: true }));
+    }
+    try {
+      const res = await fetch("/api/stalker-sync", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success && data.stalker) {
+          setStalkers(prev => prev.map(s => s.id === id ? data.stalker : s));
+          if (!silent) {
+            setStalkerFeedbackMsg(`Stalker Portal ${id} synchronized successfully!`);
+            setTimeout(() => setStalkerFeedbackMsg(null), 3000);
+          }
+        }
+      }
+    } catch (e) {
+      console.error(`Sync error for stalker ${id}:`, e);
+    } finally {
+      if (!silent) {
+        setLoadingStalkers(prev => ({ ...prev, [id]: false }));
+      }
+    }
+  };
+
+  const syncAllStalkers = async () => {
+    for (const s of stalkers) {
+      await syncStalker(s.id, true);
+    }
+  };
+
+  const handleToggleAutoRefresh = (checked: boolean) => {
+    setStalkerAutoRefresh(checked);
+    localStorage.setItem("stalkerAutoRefresh", String(checked));
+  };
+
+  // Keep stats updated, with automatic loading and 1 hour refresh intervals
+  useEffect(() => {
+    fetchStalkerStats();
+
+    const savedAuto = localStorage.getItem("stalkerAutoRefresh");
+    if (savedAuto !== null) {
+      setStalkerAutoRefresh(savedAuto === "true");
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!stalkerAutoRefresh) return;
+    const interval = setInterval(() => {
+      console.log("Triggering auto-refresh for Stalker Portals (1 Hour interval)...");
+      syncAllStalkers();
+    }, 3600000); // 1 Hour
+    return () => clearInterval(interval);
+  }, [stalkerAutoRefresh, stalkers]);
 
   // Custom M3U Playlists states
   const [customPlaylists, setCustomPlaylists] = useState<CustomPlaylist[]>([]);
@@ -624,6 +720,12 @@ Load your personalized URL in any player (TiviMate, Kodi, Apple TV, VLC):
             Custom M3U ({customPlaylists.length})
           </button>
           <button 
+            onClick={() => setActiveTab("stalker")}
+            className={`cursor-pointer px-4 py-1.5 rounded-lg text-xs font-semibold tracking-wide transition-all ${activeTab === "stalker" ? "bg-gradient-to-r from-purple-900/80 to-indigo-900/80 text-white shadow-md shadow-black/40 border border-purple-500/10" : "text-slate-400 hover:text-white"}`}
+          >
+            Stalker Portal
+          </button>
+          <button 
             onClick={() => setActiveTab("simulator")}
             className={`cursor-pointer px-4 py-1.5 rounded-lg text-xs font-semibold tracking-wide transition-all ${activeTab === "simulator" ? "bg-gradient-to-r from-purple-900/80 to-indigo-900/80 text-white shadow-md shadow-black/40 border border-purple-500/10" : "text-slate-400 hover:text-white"}`}
           >
@@ -701,6 +803,12 @@ Load your personalized URL in any player (TiviMate, Kodi, Apple TV, VLC):
             className={`cursor-pointer flex-1 py-1 px-1 rounded-lg text-[10px] font-semibold tracking-wide transition-all ${activeTab === "custom_m3u" ? "bg-gradient-to-r from-purple-900 to-indigo-900 text-white" : "text-slate-400"}`}
           >
             Custom M3U
+          </button>
+          <button 
+            onClick={() => setActiveTab("stalker")}
+            className={`cursor-pointer flex-1 py-1 px-1 rounded-lg text-[10px] font-semibold tracking-wide transition-all ${activeTab === "stalker" ? "bg-gradient-to-r from-purple-900 to-indigo-900 text-white" : "text-slate-400"}`}
+          >
+            Stalker
           </button>
           <button 
             onClick={() => setActiveTab("simulator")}
@@ -1463,8 +1571,168 @@ Load your personalized URL in any player (TiviMate, Kodi, Apple TV, VLC):
                   </div>
                 )}
               </div>
-
             </div>
+          </div>
+        )}
+
+        {/* Stalker IPTV Portals Managing Tab */}
+        {activeTab === "stalker" && (
+          <div id="stalker_panel" className="bg-[#0b0d18] border border-slate-900 rounded-2xl p-6 flex flex-col gap-6">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-900/60 pb-5">
+              <div>
+                <h3 className="text-lg font-bold text-white tracking-tight flex items-center gap-2">
+                  <Layers className="w-5 h-5 text-purple-400" />
+                  <span>Stalker Portal Feeds</span>
+                </h3>
+                <p className="text-xs text-slate-400 mt-1 font-sans">
+                  Directly fetch, parse, and compile upstream Stalker IPTV playlists into secure local outputs with dynamic token protection gates.
+                </p>
+              </div>
+
+              {/* Controls */}
+              <div className="flex flex-wrap items-center gap-4 bg-[#08090f] p-2.5 rounded-xl border border-slate-900">
+                <div className="flex items-center gap-2">
+                  <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Auto Refresh (1 Hour)</span>
+                  <button
+                    type="button"
+                    onClick={() => handleToggleAutoRefresh(!stalkerAutoRefresh)}
+                    className={`cursor-pointer px-3 py-1 rounded-md text-[10px] font-mono tracking-wide font-bold transition-all border ${
+                      stalkerAutoRefresh
+                        ? "bg-emerald-950/40 text-emerald-400 border-emerald-500/20"
+                        : "bg-slate-900 text-slate-500 border-slate-800"
+                    }`}
+                  >
+                    {stalkerAutoRefresh ? "ENABLED" : "DISABLED"}
+                  </button>
+                </div>
+                <div className="w-px h-4 bg-slate-900 hidden sm:block" />
+                <button
+                  type="button"
+                  onClick={async () => {
+                    setStalkerFeedbackMsg("Syncing all Stalker feeds...");
+                    await syncAllStalkers();
+                    setStalkerFeedbackMsg("All Stalker Portal feeds updated successfully!");
+                    setTimeout(() => setStalkerFeedbackMsg(null), 3500);
+                  }}
+                  className="cursor-pointer text-[10px] sm:text-xs font-mono font-bold tracking-wider text-purple-400 flex items-center gap-1.5 hover:text-purple-300"
+                >
+                  <RefreshCw className="w-3.5 h-3.5" />
+                  <span>SYNC ALL FEEDS</span>
+                </button>
+              </div>
+            </div>
+
+            {stalkerFeedbackMsg && (
+              <div className="bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs px-4 py-3 rounded-xl flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4 shrink-0" />
+                <span>{stalkerFeedbackMsg}</span>
+              </div>
+            )}
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {stalkers.map((s) => {
+                const secureLink = `${currentOrigin}/api/stalker/${s.id}.m3u?token=${s.token}`;
+                return (
+                  <div key={s.id} className="bg-[#08090f] border border-slate-900/90 rounded-2xl p-5 flex flex-col gap-4 hover:border-purple-500/15 transition-all">
+                    
+                    {/* Card Title Header */}
+                    <div className="flex items-center justify-between gap-3 border-b border-slate-900 pb-3">
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <div className="h-7 w-7 rounded-lg bg-purple-950/40 border border-purple-500/10 flex items-center justify-center font-bold font-mono text-purple-400 text-xs shrink-0">
+                          {s.id}
+                        </div>
+                        <div className="min-w-0">
+                          <h4 className="text-xs font-bold text-white uppercase tracking-wide truncate">{s.name}</h4>
+                          <span className="text-[9px] font-mono text-slate-500 truncate block">{s.url}</span>
+                        </div>
+                      </div>
+                      
+                      {/* Status indicator */}
+                      <div>
+                        {s.status === "active" ? (
+                          <span className="bg-emerald-950/20 text-emerald-400 text-[9px] font-mono px-2 py-0.5 rounded border border-emerald-500/10">ACTIVE</span>
+                        ) : s.status === "error" ? (
+                          <span className="bg-rose-950/20 text-rose-400 text-[9px] font-mono px-2 py-0.5 rounded border border-rose-500/10">ERROR</span>
+                        ) : (
+                          <span className="bg-amber-950/20 text-amber-500 text-[9px] font-mono px-2 py-0.5 rounded border border-amber-500/10">PENDING</span>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Output link block */}
+                    <div className="flex flex-col gap-1.5">
+                      <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Secured Proxy Endpoint URL</label>
+                      <div className="flex items-center bg-[#05060b] border border-slate-800 rounded-xl p-1.5 pl-3 gap-2">
+                        <span className="font-mono text-[10px] text-slate-300 truncate select-all flex-1">{secureLink}</span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            navigator.clipboard.writeText(secureLink);
+                            setCopiedStalkerId(s.id);
+                            setTimeout(() => setCopiedStalkerId(null), 2500);
+                          }}
+                          className="cursor-pointer bg-purple-950/40 hover:bg-purple-900/30 text-purple-400 hover:text-purple-300 shrink-0 p-2 rounded-lg border border-purple-500/10 transition-all text-xs font-bold"
+                        >
+                          {copiedStalkerId === s.id ? (
+                            <Check className="w-3.5 h-3.5 text-emerald-400" />
+                          ) : (
+                            <Copy className="w-3.5 h-3.5" />
+                          )}
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Stats Fields */}
+                    <div className="grid grid-cols-2 gap-3.5 bg-[#05060b]/40 border border-slate-900 p-3.5 rounded-xl font-mono text-[10px]">
+                      <div className="flex flex-col gap-0.5">
+                        <span className="text-slate-500 uppercase tracking-wide">SECURE CHANNELS</span>
+                        <span className="text-white font-bold text-xs">{s.channelsCount > 0 ? `${s.channelsCount} Live` : "0 (Unsynced)"}</span>
+                      </div>
+                      <div className="flex flex-col gap-0.5">
+                        <span className="text-slate-500 uppercase tracking-wide">LAST SECURED SYNC</span>
+                        <span className="text-slate-400 text-[9px] font-medium truncate">{s.lastFetchedAt}</span>
+                      </div>
+                    </div>
+
+                    {/* Error display if present */}
+                    {s.error && (
+                      <div className="text-[9px] text-rose-400 font-mono bg-rose-950/10 border border-rose-500/10 p-2 rounded-lg">
+                        Error: {s.error}
+                      </div>
+                    )}
+
+                    {/* Sync button */}
+                    <div className="flex items-center justify-between gap-4 mt-1 border-t border-slate-900 pt-3">
+                      <div className="flex flex-col">
+                        <span className="text-[9px] text-slate-500 uppercase font-mono tracking-wider">Access Token Required</span>
+                        <span className="text-[10px] font-mono text-purple-400 font-bold">{s.token}</span>
+                      </div>
+                      <button
+                        type="button"
+                        disabled={loadingStalkers[s.id]}
+                        onClick={() => syncStalker(s.id)}
+                        className="cursor-pointer bg-purple-950/20 hover:bg-purple-900/30 text-purple-400 font-bold hover:text-purple-300 text-[11px] py-2 px-3.5 rounded-xl border border-purple-500/10 transition-all flex items-center gap-1.5 uppercase tracking-wide"
+                      >
+                        <RefreshCw className={`w-3.5 h-3.5 ${loadingStalkers[s.id] ? "animate-spin" : ""}`} />
+                        <span>{loadingStalkers[s.id] ? "Syncing..." : "Sync Now"}</span>
+                      </button>
+                    </div>
+
+                  </div>
+                );
+              })}
+            </div>
+
+            <div className="bg-[#05060b] border border-slate-950 rounded-2xl p-4 text-[11px] font-mono text-slate-500 leading-relaxed flex items-start gap-2.5">
+              <Info className="w-4 h-4 text-purple-400 shrink-0 mt-0.5" />
+              <div>
+                <p className="font-bold text-slate-400 mb-1">STALKER SECURE INTERFACE COMPILING RULES</p>
+                <p>
+                  Every requested Stalker m3u file parsed by our system is completely secured. The streaming URLs are dynamically wrapped to point to the local <code className="text-purple-400">/play</code> endpoint of your deployed service instance with custom IPTV Player User Agent / Cookie headers. To test this proxy, input these secure playlist URLs in <code className="text-purple-400">TiviMate</code>, <code className="text-purple-400">VLC</code>, or any compatible IPTV client player with the specified token query parameter to authenticate seamlessly.
+                </p>
+              </div>
+            </div>
+
           </div>
         )}
 
