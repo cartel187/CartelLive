@@ -294,10 +294,7 @@ function parseM3uTextToChannels(
       // group-title
       const groupMatch = line.match(/group-title="([^"]*)"/);
       if (groupMatch) {
-        // Only override groupTitle if defaultGroup is empty, otherwise we hold defaultGroup brand
-        if (!defaultGroup) {
-          current.groupTitle = groupMatch[1];
-        }
+        current.groupTitle = groupMatch[1];
       }
 
       // name after comma
