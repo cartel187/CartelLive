@@ -1860,6 +1860,206 @@ router.delete("/custom-playlists/:id", (req, res) => {
   }
 });
 
+// Stalker Cache in-memory tracking structure
+interface StalkerCacheItem {
+  id: string;
+  name: string;
+  url: string;
+  token: string;
+  channelsCount: number;
+  lastFetchedAt: string;
+  status: "active" | "error" | "pending";
+  error?: string;
+}
+
+const stalkerCache: Record<string, StalkerCacheItem> = {
+  "1": { id: "1", name: "Stalker 1", url: "https://raw.githubusercontent.com/cartel187/CartelFlag/refs/heads/main/stalk.m3u", token: "cartelstalk1", channelsCount: 0, lastFetchedAt: "Never", status: "pending" },
+  "2": { id: "2", name: "Stalker 2", url: "https://raw.githubusercontent.com/cartel187/CartelFlag/refs/heads/main/stalk2.m3u", token: "cartelstalk2", channelsCount: 0, lastFetchedAt: "Never", status: "pending" },
+  "3": { id: "3", name: "Stalker 3", url: "https://raw.githubusercontent.com/cartel187/CartelFlag/refs/heads/main/stalk3.m3u", token: "cartelstalk3", channelsCount: 0, lastFetchedAt: "Never", status: "pending" },
+  "4": { id: "4", name: "Stalker 4", url: "https://raw.githubusercontent.com/cartel187/CartelFlag/refs/heads/main/stalk4.m3u", token: "cartelstalk4", channelsCount: 0, lastFetchedAt: "Never", status: "pending" }
+};
+
+async function syncStalkerItem(id: string): Promise<StalkerCacheItem> {
+  const item = stalkerCache[id];
+  if (!item) throw new Error("Invalid Stalker ID");
+
+  try {
+    const res = await fetch(item.url, {
+      headers: {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+      }
+    });
+
+    if (!res.ok) {
+      throw new Error(`Upstream HTTP error: ${res.status}`);
+    }
+
+    const text = await res.text();
+    const channels = parseM3uTextToChannels(text, item.name);
+    
+    item.channelsCount = channels.length;
+    item.lastFetchedAt = new Date().toLocaleTimeString("en-US", { hour12: true }) + " " + new Date().toLocaleDateString("en-US");
+    item.status = "active";
+    delete item.error;
+  } catch (err: any) {
+    item.status = "error";
+    item.error = err.message || String(err);
+    item.lastFetchedAt = new Date().toLocaleTimeString("en-US", { hour12: true }) + " " + new Date().toLocaleDateString("en-US");
+  }
+
+  return item;
+}
+
+// Stats and manual sync endpoints for front-end Dashboard
+router.get("/stalker-stats", (req, res) => {
+  res.json({ success: true, stalkers: Object.values(stalkerCache) });
+});
+
+router.post("/stalker-sync", express.json(), async (req, res) => {
+  const { id } = req.body;
+  try {
+    const updatedUserObj = await syncStalkerItem(String(id));
+    res.json({ success: true, stalker: updatedUserObj });
+  } catch (err: any) {
+    res.status(400).json({ success: false, error: err.message });
+  }
+});
+
+// Stalker playlist routing handler generating secure stream proxy links
+const stalkerPlaylistHandler = async (req: express.Request, res: express.Response) => {
+  let id = req.params.id || "";
+  if (!id) {
+    const match = req.path.match(/stalker(\d+)/i);
+    if (match) {
+      id = match[1];
+    }
+  }
+
+  const token = req.query.token as string;
+  const item = stalkerCache[id];
+
+  if (!item) {
+    return res.status(404).send("#EXTM3U\n# Error: Stalker playlist ID not found");
+  }
+
+  if (token !== item.token) {
+    return res.redirect(302, config.telegramUrl);
+  }
+
+  try {
+    const response = await fetch(item.url, {
+      headers: {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+      }
+    });
+    if (!response.ok) {
+      return res.status(502).send(`#EXTM3U\n# Error: Failed to fetch upstream M3U (status ${response.status})`);
+    }
+
+    const text = await response.text();
+
+    // Compute our host origin dynamically
+    let protocol = req.protocol;
+    const rHost = req.get("host") || "";
+    if (
+      rHost.includes("run.app") ||
+      rHost.includes("vercel.app") ||
+      req.secure
+    ) {
+      protocol = "https";
+    }
+    const host = `${protocol}://${rHost}`;
+
+    // Parse into channels
+    const parsedChannels = parseM3uTextToChannels(text, item.name);
+    
+    // Auto-update memory stats channels count softly
+    item.channelsCount = parsedChannels.length;
+    item.lastFetchedAt = new Date().toLocaleTimeString("en-US", { hour12: true }) + " " + new Date().toLocaleDateString("en-US");
+    item.status = "active";
+
+    // Build Secure XML-EPG header
+    const author = "CARTEL 187";
+    const telegram = "https://t.me/cartel187";
+    const dateNow = new Date()
+      .toLocaleString("en-GB", {
+        day: "2-digit",
+        month: "2-digit",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: true,
+      })
+      .replace(",", "");
+
+    let m3u = `#EXTM3U x-tvg-url="https://raw.githubusercontent.com/mitthu786/mitthu786/main/jio/epg.xml.gz"\n`;
+    m3u += `#DATE:- ${dateNow}\n`;
+    m3u += `# Secure Stalker Feed ${id} - Universal Format\n`;
+    m3u += `# Jointly Directed by ✨ ${author} ✨\n`;
+    m3u += `# Telegram: ${telegram}\n\n`;
+
+    for (const channel of parsedChannels) {
+      const { contentId, name, mpd, cookie } = channel;
+      const chUA = channel.userAgent || "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36";
+      const groupTitle = channel.groupTitle || item.name;
+      const chLogo = channel.logoUrl || "https://ik.imagekit.io/yjtx9nh9y/Black%20White%20Minimal%20Simple%20Modern%20Pixel%20Neon%2520%2520Modern%2520AI%2520Logo.png?updatedAt=1780156943081";
+      const groupLogoUrl = chLogo;
+
+      let kodiPropsBlock = "";
+      if (channel.kodiprops && channel.kodiprops.length > 0) {
+        for (const prop of channel.kodiprops) {
+          kodiPropsBlock += `${prop}\n`;
+        }
+      }
+
+      let extraOptsBlock = "";
+      if (channel.extraOpts && channel.extraOpts.length > 0) {
+        for (const opt of channel.extraOpts) {
+          extraOptsBlock += `${opt}\n`;
+        }
+      }
+
+      // Reconstruct streaming link beautifully using /play route
+      let rawUrl = mpd;
+      let modifiers = "";
+      if (mpd.includes("|")) {
+        const parts = mpd.split("|");
+        rawUrl = parts[0];
+        modifiers = "|" + parts.slice(1).join("|");
+      }
+
+      const securedUrl = `${host}/play?url=${encodeURIComponent(rawUrl)}${modifiers}`;
+
+      m3u += `#EXTINF:-1 tvg-id="${contentId}" tvg-name="${name}" tvg-logo="${chLogo}" group-title="${groupTitle}" group-logo="${groupLogoUrl}", ${name}\n`;
+      if (kodiPropsBlock) m3u += kodiPropsBlock;
+      if (extraOptsBlock) m3u += extraOptsBlock;
+      if (channel.extHttp) m3u += `${channel.extHttp}\n`;
+      m3u += `#EXTVLCOPT:http-user-agent=${chUA}\n`;
+      if (cookie) m3u += `#EXTVLCOPT:http-cookie=${cookie}\n`;
+      m3u += `${securedUrl}|User-Agent=${encodeURIComponent(chUA)}${cookie ? "&Cookie=" + encodeURIComponent(cookie) : ""}\n\n`;
+    }
+
+    res.setHeader("Content-Type", "application/x-mpegurl; charset=utf-8");
+    res.setHeader("Content-Disposition", `inline; filename="stalker${id}.m3u"`);
+    res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+    res.status(200).send(m3u.trim());
+  } catch (err: any) {
+    res.status(500).send(`#EXTM3U\n# Error fetching playlist: ${err.message || err}`);
+  }
+};
+
+// Map routes and their file-extension aliases
+router.get("/stalker/:id", stalkerPlaylistHandler);
+router.get("/stalker/:id.m3u", stalkerPlaylistHandler);
+router.get("/stalker1", stalkerPlaylistHandler);
+router.get("/stalker2", stalkerPlaylistHandler);
+router.get("/stalker3", stalkerPlaylistHandler);
+router.get("/stalker4", stalkerPlaylistHandler);
+router.get("/stalker1.m3u", stalkerPlaylistHandler);
+router.get("/stalker2.m3u", stalkerPlaylistHandler);
+router.get("/stalker3.m3u", stalkerPlaylistHandler);
+router.get("/stalker4.m3u", stalkerPlaylistHandler);
+
 // Channels list (for dashboard preview, does not output secret stream keys to browser unless authorized)
 router.get("/channels", async (req, res) => {
   try {
