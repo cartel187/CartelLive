@@ -275,17 +275,23 @@ function parseM3uTextToChannels(
       current = {
         contentId: "",
         name: "",
+        tvgName: "",
         mpd: "",
         cookie: "",
         kodiprops: [],
         logoUrl: defaultLogo,
         groupTitle: defaultGroup,
+        groupLogo: "",
         extraOpts: [],
       };
 
       // tvg-id
       const idMatch = line.match(/tvg-id="([^"]*)"/);
       if (idMatch) current.contentId = idMatch[1];
+
+      // tvg-name
+      const tvgNameMatch = line.match(/tvg-name="([^"]*)"/);
+      if (tvgNameMatch) current.tvgName = tvgNameMatch[1];
 
       // tvg-logo
       const logoMatch = line.match(/tvg-logo="([^"]*)"/);
@@ -295,6 +301,12 @@ function parseM3uTextToChannels(
       const groupMatch = line.match(/group-title="([^"]*)"/);
       if (groupMatch) {
         current.groupTitle = groupMatch[1];
+      }
+
+      // group-logo
+      const groupLogoMatch = line.match(/group-logo="([^"]*)"/);
+      if (groupLogoMatch) {
+        current.groupLogo = groupLogoMatch[1];
       }
 
       // name after comma
@@ -2002,11 +2014,9 @@ const stalkerPlaylistHandler = async (req: express.Request, res: express.Respons
     m3u += `# Telegram: ${telegram}\n\n`;
 
     for (const channel of parsedChannels) {
-      const { contentId, name, mpd, cookie } = channel;
-      const chUA = channel.userAgent || "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36";
+      const { contentId, name, tvgName, mpd, cookie } = channel;
       const groupTitle = channel.groupTitle || item.name;
-      const chLogo = channel.logoUrl || "https://ik.imagekit.io/yjtx9nh9y/Black%20White%20Minimal%20Simple%20Modern%20Pixel%20Neon%2520%2520Modern%2520AI%2520Logo.png?updatedAt=1780156943081";
-      const groupLogoUrl = chLogo;
+      const chLogo = channel.logoUrl || "";
 
       let kodiPropsBlock = "";
       if (channel.kodiprops && channel.kodiprops.length > 0) {
@@ -2022,24 +2032,26 @@ const stalkerPlaylistHandler = async (req: express.Request, res: express.Respons
         }
       }
 
-      // Reconstruct streaming link beautifully using /play route
-      let rawUrl = mpd;
-      let modifiers = "";
-      if (mpd.includes("|")) {
-        const parts = mpd.split("|");
-        rawUrl = parts[0];
-        modifiers = "|" + parts.slice(1).join("|");
-      }
+      // Reconstruct standard #EXTINF attribute line preserving ALL fields faithfully
+      let extinfLine = `#EXTINF:-1`;
+      if (contentId) extinfLine += ` tvg-id="${contentId}"`;
+      if (tvgName) extinfLine += ` tvg-name="${tvgName}"`;
+      if (chLogo) extinfLine += ` tvg-logo="${chLogo}"`;
+      if (groupTitle) extinfLine += ` group-title="${groupTitle}"`;
+      if (channel.groupLogo) extinfLine += ` group-logo="${channel.groupLogo}"`;
+      extinfLine += `,${name}\n`;
 
-      const securedUrl = `${host}/play?url=${encodeURIComponent(rawUrl)}${modifiers}`;
-
-      m3u += `#EXTINF:-1 tvg-id="${contentId}" tvg-name="${name}" tvg-logo="${chLogo}" group-title="${groupTitle}" group-logo="${groupLogoUrl}", ${name}\n`;
+      m3u += extinfLine;
       if (kodiPropsBlock) m3u += kodiPropsBlock;
       if (extraOptsBlock) m3u += extraOptsBlock;
       if (channel.extHttp) m3u += `${channel.extHttp}\n`;
-      m3u += `#EXTVLCOPT:http-user-agent=${chUA}\n`;
-      if (cookie) m3u += `#EXTVLCOPT:http-cookie=${cookie}\n`;
-      m3u += `${securedUrl}|User-Agent=${encodeURIComponent(chUA)}${cookie ? "&Cookie=" + encodeURIComponent(cookie) : ""}\n\n`;
+      if (channel.userAgent) {
+        m3u += `#EXTVLCOPT:http-user-agent=${channel.userAgent}\n`;
+      }
+      if (cookie) {
+        m3u += `#EXTVLCOPT:http-cookie=${cookie}\n`;
+      }
+      m3u += `${mpd}\n\n`;
     }
 
     res.setHeader("Content-Type", "application/x-mpegurl; charset=utf-8");
