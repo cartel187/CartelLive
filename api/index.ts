@@ -25,7 +25,7 @@ function isAllowedPlayer(userAgent: string | undefined): boolean {
   if (!userAgent) return false;
   const ua = userAgent.toLowerCase();
 
-  // Strict whitelist of IPTV player keywords
+  // Whitelist of IPTV players/engines
   const playerKeywords = [
     "tivimate",
     "ott",
@@ -46,10 +46,51 @@ function isAllowedPlayer(userAgent: string | undefined): boolean {
     "applecoremedia",
     "stagefright",
     "lavf",
-    "plaYtv"
+    "playtv",
+    "libvlc",
+    "smarttv",
+    "lg",
+    "samsung",
+    "sony",
+    "panasonic",
+    "mag",
+    "stb",
+    "darplayer"
   ];
 
-  return playerKeywords.some((kw) => ua.includes(kw));
+  // Scraper/Browser keywords
+  const scraperKeywords = [
+    "mozilla",
+    "chrome",
+    "safari",
+    "firefox",
+    "edge",
+    "opera",
+    "curl",
+    "wget",
+    "python",
+    "node",
+    "axios",
+    "postman",
+    "insomnia",
+    "urllib",
+    "java",
+    "perl",
+    "go-http"
+  ];
+
+  // If UA has a known IPTV player/engine keyword, allow it immediately!
+  if (playerKeywords.some((kw) => ua.includes(kw))) {
+    return true;
+  }
+
+  // If it's a known browser/scraper tool, block it!
+  if (scraperKeywords.some((kw) => ua.includes(kw))) {
+    return false;
+  }
+
+  // For any other/unknown UA (e.g. obscure custom smart TV engines), allow them to prevent stream blockage
+  return true;
 }
 
 // Extract real client IP under multiple layers of load balancers / proxies / CDNs
@@ -2135,75 +2176,28 @@ const stalkerPlaylistHandler = async (req: express.Request, res: express.Respons
     }
     const host = `${protocol}://${rHost}`;
 
-    // Parse into channels
-    const parsedChannels = parseM3uTextToChannels(text, item.name);
-    
-    // Auto-update memory stats channels count softly
-    item.channelsCount = parsedChannels.length;
+    // Softly parse just to keep the dashboard stats counts accurate
+    try {
+      const parsedChannels = parseM3uTextToChannels(text, item.name);
+      item.channelsCount = parsedChannels.length;
+    } catch (e) {
+      console.error("Dashboard channels sync warning:", e);
+    }
     item.lastFetchedAt = new Date().toLocaleTimeString("en-US", { hour12: true }) + " " + new Date().toLocaleDateString("en-US");
     item.status = "active";
 
-    // Build Secure XML-EPG header
-    const author = "CARTEL 187";
-    const telegram = "https://t.me/cartel187";
-    const dateNow = new Date()
-      .toLocaleString("en-GB", {
-        day: "2-digit",
-        month: "2-digit",
-        year: "numeric",
-        hour: "2-digit",
-        minute: "2-digit",
-        hour12: true,
-      })
-      .replace(",", "");
-
-    let m3u = `#EXTM3U x-tvg-url="https://raw.githubusercontent.com/mitthu786/mitthu786/main/jio/epg.xml.gz"\n`;
-    m3u += `#DATE:- ${dateNow}\n`;
-    m3u += `# Secure Stalker Feed ${id} - Universal Format\n`;
-    m3u += `# Jointly Directed by ✨ ${author} ✨\n`;
-    m3u += `# Telegram: ${telegram}\n\n`;
-
-    for (const channel of parsedChannels) {
-      const { contentId, name, tvgName, mpd, cookie } = channel;
-      const groupTitle = channel.groupTitle || item.name;
-      const chLogo = channel.logoUrl || "";
-
-      let kodiPropsBlock = "";
-      if (channel.kodiprops && channel.kodiprops.length > 0) {
-        for (const prop of channel.kodiprops) {
-          kodiPropsBlock += `${prop}\n`;
-        }
+    // Build secure playlist, keeping 100% of the M3U structure and details exactly "as is" from the source.
+    // We only swap HTTP/HTTPS stream lines with encrypted playback URLs.
+    const lines = text.split(/\r?\n/);
+    const securedLines = lines.map((line) => {
+      const trimmed = line.trim();
+      if (trimmed && (trimmed.startsWith("http://") || trimmed.startsWith("https://")) && !trimmed.startsWith("#")) {
+        return wrapStreamUrl(trimmed, host, true, id, clientIp);
       }
+      return line;
+    });
 
-      let extraOptsBlock = "";
-      if (channel.extraOpts && channel.extraOpts.length > 0) {
-        for (const opt of channel.extraOpts) {
-          extraOptsBlock += `${opt}\n`;
-        }
-      }
-
-      // Reconstruct standard #EXTINF attribute line preserving ALL fields faithfully
-      let extinfLine = `#EXTINF:-1`;
-      if (contentId) extinfLine += ` tvg-id="${contentId}"`;
-      if (tvgName) extinfLine += ` tvg-name="${tvgName}"`;
-      if (chLogo) extinfLine += ` tvg-logo="${chLogo}"`;
-      if (groupTitle) extinfLine += ` group-title="${groupTitle}"`;
-      if (channel.groupLogo) extinfLine += ` group-logo="${channel.groupLogo}"`;
-      extinfLine += `,${name}\n`;
-
-      m3u += extinfLine;
-      if (kodiPropsBlock) m3u += kodiPropsBlock;
-      if (extraOptsBlock) m3u += extraOptsBlock;
-      if (channel.extHttp) m3u += `${channel.extHttp}\n`;
-      if (channel.userAgent) {
-        m3u += `#EXTVLCOPT:http-user-agent=${channel.userAgent}\n`;
-      }
-      if (cookie) {
-        m3u += `#EXTVLCOPT:http-cookie=${cookie}\n`;
-      }
-      const securedUrl = wrapStreamUrl(mpd, host, true, id, clientIp);
-      m3u += `${securedUrl}\n\n`;
-    }
+    const m3u = securedLines.join("\n");
 
     res.setHeader("Content-Type", "application/x-mpegurl; charset=utf-8");
     res.setHeader("Content-Disposition", `inline; filename="stalker${id}.m3u"`);
