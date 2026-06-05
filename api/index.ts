@@ -17,6 +17,7 @@ const config = {
   preferredSource: "m3u",
   enableTokenProtection: true,
   enableUserAgentCheck: true,
+  enableIpPinning: false,
 };
 
 // Helper to determine if a request comes from an allowed player
@@ -1601,6 +1602,7 @@ router.get("/config", (req, res) => {
     secureToken: config.secureToken,
     enableTokenProtection: config.enableTokenProtection,
     enableUserAgentCheck: config.enableUserAgentCheck,
+    enableIpPinning: config.enableIpPinning,
     lastFetchedTime: lastFetched ? new Date(lastFetched).toISOString() : null,
     jioSourceUrl: "https://****** [Connected (Secure Feed)]",
     jioM3uUrl: "https://****** / Protected Feed Link",
@@ -1615,6 +1617,7 @@ router.post("/config", express.json(), (req, res) => {
     secureToken,
     enableTokenProtection,
     enableUserAgentCheck,
+    enableIpPinning,
     preferredSource,
   } = req.body;
   if (telegramUrl !== undefined) config.telegramUrl = telegramUrl;
@@ -1623,6 +1626,8 @@ router.post("/config", express.json(), (req, res) => {
     config.enableTokenProtection = enableTokenProtection;
   if (enableUserAgentCheck !== undefined)
     config.enableUserAgentCheck = enableUserAgentCheck;
+  if (enableIpPinning !== undefined)
+    config.enableIpPinning = enableIpPinning;
   if (preferredSource !== undefined) config.preferredSource = preferredSource;
 
   res.json({
@@ -1633,6 +1638,7 @@ router.post("/config", express.json(), (req, res) => {
       secureToken: config.secureToken,
       enableTokenProtection: config.enableTokenProtection,
       enableUserAgentCheck: config.enableUserAgentCheck,
+      enableIpPinning: config.enableIpPinning,
       lastFetchedTime: lastFetched ? new Date(lastFetched).toISOString() : null,
       jioSourceUrl: "https://****** [Connected (Secure Feed)]",
       jioM3uUrl: "https://****** / Protected Feed Link",
@@ -1657,7 +1663,7 @@ const playHandler = async (
       const stalkerId = parts[1];
       const encryptedIp = parts[2];
 
-      if (stalkerId) {
+      if (stalkerId && config.enableIpPinning) {
         const item = stalkerCache[stalkerId];
         if (item) {
           const clientIp = getClientIp(req);
