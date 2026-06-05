@@ -53,6 +53,7 @@ export default function App() {
   const [tokenInput, setTokenInput] = useState(config.secureToken);
   const [tokenProtectionToggle, setTokenProtectionToggle] = useState(config.enableTokenProtection);
   const [uaCheckToggle, setUaCheckToggle] = useState(config.enableUserAgentCheck);
+  const [ipPinningToggle, setIpPinningToggle] = useState(config.enableIpPinning || false);
   const [preferredSource, setPreferredSource] = useState(config.preferredSource || "m3u");
   const [savingSettings, setSavingSettings] = useState(false);
   const [settingsSuccess, setSettingsSuccess] = useState(false);
@@ -302,6 +303,7 @@ export default function App() {
         setTokenInput(data.secureToken);
         setTokenProtectionToggle(data.enableTokenProtection);
         setUaCheckToggle(data.enableUserAgentCheck);
+        setIpPinningToggle(data.enableIpPinning || false);
         if (data.preferredSource) setPreferredSource(data.preferredSource);
         setSimToken(data.secureToken);
       }
@@ -368,6 +370,7 @@ export default function App() {
           secureToken: tokenInput,
           enableTokenProtection: tokenProtectionToggle,
           enableUserAgentCheck: uaCheckToggle,
+          enableIpPinning: ipPinningToggle,
           preferredSource: preferredSource
         }),
       });
@@ -882,7 +885,7 @@ Load your personalized URL in any player (TiviMate, Kodi, Apple TV, VLC):
                   </div>
 
                   {/* Advanced Multi Toggles */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-2">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-2">
                     
                     {/* UA Protection Toggle */}
                     <div className="flex items-start gap-3 bg-[#080a11] border border-slate-900/60 p-4 rounded-xl">
@@ -911,6 +914,21 @@ Load your personalized URL in any player (TiviMate, Kodi, Apple TV, VLC):
                       <div className="flex flex-col">
                         <label htmlFor="token_toggle" className="text-xs font-semibold text-slate-200 cursor-pointer">Enforce Access Key</label>
                         <span className="text-[10px] text-slate-500 leading-relaxed mt-0.5">Require your security token in parameters.</span>
+                      </div>
+                    </div>
+
+                    {/* IP Pinning Toggle */}
+                    <div className="flex items-start gap-3 bg-[#080a11] border border-slate-900/60 p-4 rounded-xl" id="div_ip_pinning">
+                      <input 
+                        type="checkbox"
+                        id="ip_pinning_toggle"
+                        checked={ipPinningToggle}
+                        onChange={(e) => setIpPinningToggle(e.target.checked)}
+                        className="w-4 h-4 rounded text-purple-600 bg-black border-slate-800 focus:ring-purple-600 focus:ring-offset-black mt-0.5"
+                      />
+                      <div className="flex flex-col">
+                        <label htmlFor="ip_pinning_toggle" className="text-xs font-semibold text-slate-200 cursor-pointer">Sticky IP Lock</label>
+                        <span className="text-[10px] text-slate-500 leading-relaxed mt-0.5">Force stream playback to match playlist requester's IP.</span>
                       </div>
                     </div>
 
