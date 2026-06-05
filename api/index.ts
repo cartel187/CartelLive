@@ -51,6 +51,44 @@ function isAllowedPlayer(userAgent: string | undefined): boolean {
   return playerKeywords.some((kw) => ua.includes(kw));
 }
 
+// Extract real client IP under multiple layers of load balancers / proxies / CDNs
+function getClientIp(req: express.Request): string {
+  let ip = req.ip || req.socket.remoteAddress || "unknown";
+  if (req.headers["x-forwarded-for"]) {
+    const forwarded = req.headers["x-forwarded-for"] as string;
+    ip = forwarded.split(",")[0].trim();
+  }
+  return ip;
+}
+
+// Compare two IPs securely, allowing subnet matching to accommodate minor mobile/cellular operator IP rotations
+function compareIps(ip1: string, ip2: string): boolean {
+  if (ip1 === ip2) return true;
+  if (ip1 === "unknown" || ip2 === "unknown") return false;
+  
+  // Normalize IPv6 mapped IPv4 addresses (e.g. ::ffff:192.168.1.1)
+  const norm1 = ip1.startsWith("::ffff:") ? ip1.substring(7) : ip1;
+  const norm2 = ip2.startsWith("::ffff:") ? ip2.substring(7) : ip2;
+  
+  if (norm1 === norm2) return true;
+  
+  // For IP range /24 subnet comparison for cellular IP changes
+  const parts1 = norm1.split(".");
+  const parts2 = norm2.split(".");
+  if (parts1.length === 4 && parts2.length === 4) {
+    return parts1[0] === parts2[0] && parts1[1] === parts2[1] && parts1[2] === parts2[2];
+  }
+  
+  // Handle IPv6 /64 prefix comparison
+  const hex1 = norm1.split(":");
+  const hex2 = norm2.split(":");
+  if (hex1.length > 2 && hex2.length > 2) {
+    return hex1.slice(0, 4).join(":") === hex2.slice(0, 4).join(":");
+  }
+  
+  return false;
+}
+
 // AES-256-CBC encryption to secure play links from scraping/unauthorized downloads
 const CRYPTO_KEY = crypto.scryptSync(process.env.SECURE_TOKEN || "cartel187_secure_key", "salt-cartel", 32);
 const IV_LENGTH = 16;
@@ -262,7 +300,13 @@ function getGroupLogo(groupName: string): string {
 }
 
 // Protect stream playback and redirect traffic via Vercel-like routing matching request origin
-function wrapStreamUrl(urlStr: string, host: string, forceEncrypt: boolean = false): string {
+function wrapStreamUrl(
+  urlStr: string,
+  host: string,
+  forceEncrypt: boolean = false,
+  stalkerId?: string,
+  clientIp?: string
+): string {
   if (!urlStr || !urlStr.startsWith("http")) return urlStr;
 
   let baseUrl = urlStr;
@@ -273,9 +317,14 @@ function wrapStreamUrl(urlStr: string, host: string, forceEncrypt: boolean = fal
     modifiers = "|" + parts.slice(1).join("|");
   }
 
-  // If forceEncrypt is requested, we strongly encrypt the stream URL
+  // If forceEncrypt is requested, we strongly encrypt the stream URL with IP and token fingerprints
   if (forceEncrypt) {
-    const encrypted = encryptStreamUrl(baseUrl);
+    const payload = (stalkerId && clientIp)
+      ? `${baseUrl}||${stalkerId}||${clientIp}`
+      : stalkerId
+        ? `${baseUrl}||${stalkerId}`
+        : baseUrl;
+    const encrypted = encryptStreamUrl(payload);
     return `${host}/play?e=${encodeURIComponent(encrypted)}${modifiers}`;
   }
 
@@ -1603,7 +1652,22 @@ const playHandler = async (
   if (encryptedUrl) {
     const decrypted = decryptStreamUrl(encryptedUrl);
     if (decrypted) {
-      targetUrl = decrypted;
+      const parts = decrypted.split("||");
+      targetUrl = parts[0];
+      const stalkerId = parts[1];
+      const encryptedIp = parts[2];
+
+      if (stalkerId) {
+        const item = stalkerCache[stalkerId];
+        if (item) {
+          const clientIp = getClientIp(req);
+          const allowedIp = encryptedIp || item.lockedIp;
+          if (allowedIp && !compareIps(clientIp, allowedIp)) {
+            console.log(`[PlayGate Security] Access Denied. Requester IP ${clientIp} does not match locked IP ${allowedIp} for Stalker ID ${stalkerId}`);
+            return res.status(403).send("Streaming permitted only on the device/connection that initialized this playlist");
+          }
+        }
+      }
     } else {
       return res.status(403).send("Invalid stream signature");
     }
@@ -1941,6 +2005,7 @@ interface StalkerCacheItem {
   lastFetchedAt: string;
   status: "active" | "error" | "pending";
   error?: string;
+  lockedIp?: string; // Pinning the IPTV player to a single IP address/subnet
 }
 
 const stalkerCache: Record<string, StalkerCacheItem> = {
@@ -2035,6 +2100,11 @@ const stalkerPlaylistHandler = async (req: express.Request, res: express.Respons
     return res.redirect(302, config.telegramUrl);
   }
 
+  // IP Pinning / Sticky Session: Lock the playlist token to the requester's IP
+  const clientIp = getClientIp(req);
+  item.lockedIp = clientIp;
+  console.log(`[Stalker Security] Token "${token}" successfully locked to IP address: ${clientIp}`);
+
   try {
     const response = await fetch(item.url, {
       headers: {
@@ -2125,7 +2195,7 @@ const stalkerPlaylistHandler = async (req: express.Request, res: express.Respons
       if (cookie) {
         m3u += `#EXTVLCOPT:http-cookie=${cookie}\n`;
       }
-      const securedUrl = wrapStreamUrl(mpd, host, true);
+      const securedUrl = wrapStreamUrl(mpd, host, true, id, clientIp);
       m3u += `${securedUrl}\n\n`;
     }
 
