@@ -2,6 +2,7 @@ import express from "express";
 import dotenv from "dotenv";
 import fs from "fs";
 import path from "path";
+import crypto from "crypto";
 
 dotenv.config();
 
@@ -48,6 +49,42 @@ function isAllowedPlayer(userAgent: string | undefined): boolean {
   ];
 
   return playerKeywords.some((kw) => ua.includes(kw));
+}
+
+// AES-256-CBC encryption to secure play links from scraping/unauthorized downloads
+const CRYPTO_KEY = crypto.scryptSync(process.env.SECURE_TOKEN || "cartel187_secure_key", "salt-cartel", 32);
+const IV_LENGTH = 16;
+
+function encryptStreamUrl(text: string): string {
+  try {
+    const iv = crypto.randomBytes(IV_LENGTH);
+    const cipher = crypto.createCipheriv("aes-256-cbc", CRYPTO_KEY, iv);
+    let encrypted = cipher.update(text, "utf8", "hex");
+    encrypted += cipher.final("hex");
+    return iv.toString("hex") + ":" + encrypted;
+  } catch (err) {
+    console.error("Encryption failed:", err);
+    return "b64:" + Buffer.from(text).toString("base64");
+  }
+}
+
+function decryptStreamUrl(encryptedText: string): string | null {
+  try {
+    if (encryptedText.startsWith("b64:")) {
+      return Buffer.from(encryptedText.substring(4), "base64").toString("utf8");
+    }
+    const parts = encryptedText.split(":");
+    if (parts.length !== 2) return null;
+    const iv = Buffer.from(parts[0], "hex");
+    const encrypted = Buffer.from(parts[1], "hex");
+    const decipher = crypto.createDecipheriv("aes-256-cbc", CRYPTO_KEY, iv);
+    let decrypted = decipher.update(encrypted, undefined, "utf8");
+    decrypted += decipher.final("utf8");
+    return decrypted;
+  } catch (err) {
+    console.error("Decryption failed:", err);
+    return null;
+  }
 }
 
 // Redirect middleware / validation logic
@@ -225,8 +262,22 @@ function getGroupLogo(groupName: string): string {
 }
 
 // Protect stream playback and redirect traffic via Vercel-like routing matching request origin
-function wrapStreamUrl(urlStr: string, host: string): string {
+function wrapStreamUrl(urlStr: string, host: string, forceEncrypt: boolean = false): string {
   if (!urlStr || !urlStr.startsWith("http")) return urlStr;
+
+  let baseUrl = urlStr;
+  let modifiers = "";
+  if (urlStr.includes("|")) {
+    const parts = urlStr.split("|");
+    baseUrl = parts[0];
+    modifiers = "|" + parts.slice(1).join("|");
+  }
+
+  // If forceEncrypt is requested, we strongly encrypt the stream URL
+  if (forceEncrypt) {
+    const encrypted = encryptStreamUrl(baseUrl);
+    return `${host}/play?e=${encodeURIComponent(encrypted)}${modifiers}`;
+  }
 
   const lowerUrl = urlStr.toLowerCase();
   if (
@@ -241,14 +292,6 @@ function wrapStreamUrl(urlStr: string, host: string): string {
     urlStr.includes(host)
   ) {
     return urlStr;
-  }
-
-  let baseUrl = urlStr;
-  let modifiers = "";
-  if (urlStr.includes("|")) {
-    const parts = urlStr.split("|");
-    baseUrl = parts[0];
-    modifiers = "|" + parts.slice(1).join("|");
   }
 
   return `${host}/play?url=${encodeURIComponent(baseUrl)}${modifiers}`;
@@ -1554,10 +1597,29 @@ const playHandler = async (
   req: express.Request,
   res: express.Response,
 ): Promise<any> => {
-  const targetUrl = req.query.url as string;
+  let targetUrl = req.query.url as string;
+  const encryptedUrl = req.query.e as string;
+
+  if (encryptedUrl) {
+    const decrypted = decryptStreamUrl(encryptedUrl);
+    if (decrypted) {
+      targetUrl = decrypted;
+    } else {
+      return res.status(403).send("Invalid stream signature");
+    }
+  }
+
   if (!targetUrl) {
     return res.status(400).send("Missing stream URL");
   }
+
+  // Check user-agent security gate if configured
+  const userAgent = req.headers["user-agent"];
+  if (config.enableUserAgentCheck && !isAllowedPlayer(userAgent)) {
+    console.log(`[PlayGate] Blocked non-player streaming attempt. UA: ${userAgent}`);
+    return res.status(403).send("Streaming permitted only on IPTV Players");
+  }
+
   return res.redirect(302, targetUrl);
 };
 
@@ -1936,6 +1998,18 @@ router.post("/stalker-sync", express.json(), async (req, res) => {
 
 // Stalker playlist routing handler generating secure stream proxy links
 const stalkerPlaylistHandler = async (req: express.Request, res: express.Response) => {
+  // Strict User-Agent Gate (Only allowed IPTV Players can download the stalker playlist)
+  let userAgent = req.headers["user-agent"];
+  if (req.query.ua) {
+     userAgent = req.query.ua as string;
+  }
+  if (config.enableUserAgentCheck && !isAllowedPlayer(userAgent)) {
+    console.log(
+      `[Stalker Gate] Blocked non-player fetch. UA: ${userAgent}. Redirecting to Telegram.`,
+    );
+    return res.redirect(302, config.telegramUrl);
+  }
+
   let id = req.params.id || "";
   console.log('[Stalker] Request incoming:', { params: req.params, path: req.path, originalUrl: req.originalUrl });
   if (id.endsWith(".m3u")) {
@@ -2051,7 +2125,8 @@ const stalkerPlaylistHandler = async (req: express.Request, res: express.Respons
       if (cookie) {
         m3u += `#EXTVLCOPT:http-cookie=${cookie}\n`;
       }
-      m3u += `${mpd}\n\n`;
+      const securedUrl = wrapStreamUrl(mpd, host, true);
+      m3u += `${securedUrl}\n\n`;
     }
 
     res.setHeader("Content-Type", "application/x-mpegurl; charset=utf-8");
