@@ -24,9 +24,11 @@ import {
   FileCode,
   CheckCircle2,
   Eye,
-  EyeOff
+  EyeOff,
+  Users,
+  UserCheck
 } from "lucide-react";
-import { GuardConfig, ChannelItem, ServerStats, SimulationResult, CustomPlaylist } from "./types";
+import { GuardConfig, ChannelItem, ServerStats, SimulationResult, CustomPlaylist, UserToken } from "./types";
 
 export default function App() {
   // Config state
@@ -38,8 +40,30 @@ export default function App() {
     lastFetchedTime: null,
     jioSourceUrl: "https://****** [Connected (Secure Feed)]",
     jioM3uUrl: "https://****** / Protected Feed Link",
-    preferredSource: "m3u"
+    preferredSource: "m3u",
+    telegramBotToken: "",
+    telegramChatId: "",
   });
+
+  // Client Portal & Bypass Authentication States
+  const [authStatus, setAuthStatus] = useState<{ isAuthenticated: boolean; role: "admin" | "user" | null; token: string | null }>({
+    isAuthenticated: false,
+    role: null,
+    token: null
+  });
+  const [loadingAuth, setLoadingAuth] = useState(true);
+  const [currentUser, setCurrentUser] = useState<UserToken | null>(null);
+  const [telegramLoginUsername, setTelegramLoginUsername] = useState("");
+  const [loggingInTelegram, setLoggingInTelegram] = useState(false);
+  const [telegramLoginError, setTelegramLoginError] = useState<string | null>(null);
+
+  // Admin Custom Tokens table trackers
+  const [userTokens, setUserTokens] = useState<UserToken[]>([]);
+  const [loadingUserTokens, setLoadingUserTokens] = useState(false);
+
+  // Telegram Bot integration form states
+  const [telegramBotTokenInput, setTelegramBotTokenInput] = useState("");
+  const [telegramChatIdInput, setTelegramChatIdInput] = useState("");
 
   // Channels & stats state
   const [channels, setChannels] = useState<ChannelItem[]>([]);
@@ -69,7 +93,7 @@ export default function App() {
   const [simulating, setSimulating] = useState(false);
 
   // UI state
-  const [activeTab, setActiveTab] = useState<"dashboard" | "channels" | "custom_m3u" | "simulator" | "stalker">("dashboard");
+  const [activeTab, setActiveTab] = useState<"dashboard" | "channels" | "custom_m3u" | "simulator" | "stalker" | "user_manager">("dashboard");
   const [copiedUrl, setCopiedUrl] = useState(false);
   const [currentOrigin, setCurrentOrigin] = useState("https://your-domain.vercel.app");
 
@@ -306,9 +330,74 @@ export default function App() {
         setIpPinningToggle(data.enableIpPinning || false);
         if (data.preferredSource) setPreferredSource(data.preferredSource);
         setSimToken(data.secureToken);
+        if (data.telegramBotToken) setTelegramBotTokenInput(data.telegramBotToken);
+        if (data.telegramChatId) setTelegramChatIdInput(data.telegramChatId);
       }
     } catch (e) {
       console.warn("Could not load backend config directly, using simulation/default mode.");
+    }
+  };
+
+  // Fetch all registered Telegram users/tokens
+  const fetchUserTokens = async () => {
+    setLoadingUserTokens(true);
+    try {
+      const res = await fetch("/api/admin/user-tokens");
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success && data.tokens) {
+          setUserTokens(data.tokens);
+        }
+      }
+    } catch (e) {
+      console.error("Error loading user tokens:", e);
+    } finally {
+      setLoadingUserTokens(false);
+    }
+  };
+
+  // Revoke/Delete a client token
+  const deleteUserToken = async (targetToken: string) => {
+    if (!window.confirm("Are you absolutely sure you want to revoke and delete this client token? They will instantly lose stream subscription access!")) return;
+    try {
+      const res = await fetch("/api/admin/user-tokens/delete", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ targetToken })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success) {
+          setUserTokens(prev => prev.filter(t => t.token !== targetToken));
+        } else {
+          alert(data.error || "Failed to delete token");
+        }
+      }
+    } catch (e: any) {
+      alert("Error: " + e.message);
+    }
+  };
+
+  // Reset pinned device IP locks
+  const resetUserTokenIps = async (targetToken: string) => {
+    if (!window.confirm("Are you sure you want to reset and clear all pinned hardware device connections for this user? This allows them to register new devices.")) return;
+    try {
+      const res = await fetch("/api/admin/user-tokens/reset-ips", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ targetToken })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success) {
+          setUserTokens(prev => prev.map(t => t.token === targetToken ? { ...t, activeIps: [] } : t));
+          alert("Device locks successfully cleared!");
+        } else {
+          alert(data.error || "Failed to reset devices");
+        }
+      }
+    } catch (e: any) {
+      alert("Error: " + e.message);
     }
   };
 
@@ -339,10 +428,40 @@ export default function App() {
   };
 
   useEffect(() => {
-    fetchConfig();
-    fetchChannels();
-    fetchCustomPlaylists();
+    const checkAuthAndSync = async () => {
+      try {
+        const res = await fetch("/api/auth/status");
+        if (res.ok) {
+          const status = await res.json();
+          setAuthStatus(status);
+          
+          if (status.role === "admin") {
+            // Admin authenticated - populate normal admin variables
+            fetchConfig();
+            fetchChannels();
+            fetchCustomPlaylists();
+            fetchUserTokens();
+          } else if (status.role === "user") {
+            // Regular user portal access
+            const cachedUser = localStorage.getItem("cartel_telegram_user");
+            if (cachedUser) {
+              try {
+                setCurrentUser(JSON.parse(cachedUser));
+              } catch (e) {
+                // Ignore
+              }
+            }
+          }
+        }
+      } catch (e) {
+        console.error("Auth status query failed:", e);
+      } finally {
+        setLoadingAuth(false);
+      }
+    };
     
+    checkAuthAndSync();
+
     // Auto-fetch every 1 hour (3600000 ms)
     const interval = setInterval(() => {
       console.log("Auto-fetching channels...");
@@ -371,7 +490,9 @@ export default function App() {
           enableTokenProtection: tokenProtectionToggle,
           enableUserAgentCheck: uaCheckToggle,
           enableIpPinning: ipPinningToggle,
-          preferredSource: preferredSource
+          preferredSource: preferredSource,
+          telegramBotToken: telegramBotTokenInput,
+          telegramChatId: telegramChatIdInput,
         }),
       });
       if (response.ok) {
@@ -396,6 +517,48 @@ export default function App() {
     navigator.clipboard.writeText(text);
     setCopiedUrl(true);
     setTimeout(() => setCopiedUrl(false), 2000);
+  };
+
+  const handleTelegramLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!telegramLoginUsername.trim()) return;
+    setLoggingInTelegram(true);
+    setTelegramLoginError(null);
+    try {
+      const res = await fetch("/api/auth/telegram-login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username: telegramLoginUsername })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success && data.user) {
+          setCurrentUser(data.user);
+          localStorage.setItem("cartel_telegram_user", JSON.stringify(data.user));
+        } else {
+          setTelegramLoginError(data.error || "Login Verification failed");
+        }
+      } else {
+        setTelegramLoginError(`Login refused with status ${res.status}`);
+      }
+    } catch (err: any) {
+      setTelegramLoginError(err.message || "Network error. Try again");
+    } finally {
+      setLoggingInTelegram(false);
+    }
+  };
+
+  const handleLogout = async () => {
+    if (!window.confirm("Are you sure you want to sign out?")) return;
+    try {
+      await fetch("/api/auth/logout", { method: "POST" });
+      localStorage.removeItem("cartel_telegram_user");
+      setCurrentUser(null);
+      setAuthStatus({ isAuthenticated: false, role: null, token: null });
+      window.location.reload();
+    } catch (e) {
+      console.error(e);
+    }
   };
 
 
@@ -683,6 +846,294 @@ Load your personalized URL in any player (TiviMate, Kodi, Apple TV, VLC):
     return matchesSearch && group === selectedCategory;
   });
 
+  if (loadingAuth) {
+    return (
+      <div className="min-h-screen bg-[#07090e] flex flex-col items-center justify-center p-6 text-center font-sans relative overflow-hidden">
+        <div className="absolute top-0 left-1/4 w-[300px] h-[300px] bg-purple-950/20 rounded-full blur-[100px] pointer-events-none"></div>
+        <div className="relative flex flex-col items-center gap-4">
+          <div className="p-4 bg-purple-900/15 border border-purple-500/20 rounded-2xl text-purple-400 animate-pulse">
+            <Shield className="w-10 h-10" />
+          </div>
+          <h2 className="text-lg font-bold text-white font-mono tracking-widest uppercase">Initializing Secure Shield</h2>
+          <p className="text-xs text-slate-500 max-w-xs leading-relaxed">Authenticating server handshake protocols. Please wait...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!authStatus.isAuthenticated) {
+    return (
+      <div className="min-h-screen bg-[#07090e] flex flex-col items-center justify-center p-6 text-center font-sans relative overflow-hidden">
+        <div className="absolute top-0 left-1/4 w-[300px] h-[300px] bg-red-950/20 rounded-full blur-[100px] pointer-events-none"></div>
+        <div className="max-w-md w-full bg-[#0d0f19] border border-slate-900 p-8 rounded-2xl relative shadow-2xl flex flex-col items-center">
+          <div className="p-4 bg-red-950/20 border border-red-500/20 rounded-2xl text-red-500 mb-6 font-mono">
+            <Lock className="w-8 h-8 animate-pulse text-red-500" />
+          </div>
+          <h1 className="text-xl font-bold text-white tracking-tight leading-tight">Secure Perimeter Active</h1>
+          <p className="text-xs text-slate-400 mt-3 max-w-sm leading-relaxed font-sans">
+            This endpoint is strictly guarded. Standard browser requests are automatically forwarded to our official Telegram channel.
+          </p>
+          <div className="w-full mt-6 flex flex-col gap-3">
+            <a 
+              href={config.telegramUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="w-full py-3 px-4 rounded-xl text-xs font-bold bg-gradient-to-r from-purple-700 to-indigo-700 hover:from-purple-600 hover:to-indigo-600 text-white transition-all shadow-lg flex items-center justify-center gap-2"
+            >
+              <Send className="w-4 h-4" />
+              <span>Join our Official Telegram</span>
+            </a>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (authStatus.role === "user" && !currentUser) {
+    return (
+      <div className="min-h-screen bg-[#07090e] flex flex-col items-center justify-center p-6 text-center font-sans relative overflow-hidden">
+        {/* Atmosphere */}
+        <div className="absolute top-0 left-1/4 w-[500px] h-[500px] bg-purple-950/20 rounded-full blur-[140px] pointer-events-none"></div>
+        <div className="absolute bottom-10 right-1/4 w-[600px] h-[600px] bg-blue-950/15 rounded-full blur-[140px] pointer-events-none"></div>
+
+        <div className="max-w-md w-full bg-[#0b0d18] border border-slate-900 rounded-3xl p-8 relative shadow-2xl">
+          <div className="flex flex-col items-center mb-8">
+            <div className="bg-transparent rounded-2xl overflow-hidden shadow-lg shadow-purple-900/10 ring-1 ring-purple-500/20 mb-4 animate-bounce">
+              <img src="https://ik.imagekit.io/yjtx9nh9y/Black%20White%20Minimal%20Simple%20Modern%20Pixel%20Neon%20%20Modern%20AI%20Logo.png?updatedAt=1780156943081" alt="Logo" className="w-12 h-12 object-cover" />
+            </div>
+            <h1 className="text-2xl font-bold text-white tracking-tight bg-gradient-to-r from-white via-slate-200 to-slate-400 bg-clip-text text-transparent">ＣΛＲＴΞＬ  ＬＩＶΞ</h1>
+            <p className="text-[10px] font-mono tracking-widest text-purple-400 font-bold uppercase mt-1">Telegram M3U Generator</p>
+          </div>
+
+          <div className="border border-purple-500/10 bg-purple-950/5 p-4 rounded-2xl mb-6 text-left">
+            <h2 className="text-xs font-bold text-purple-400 uppercase tracking-widest mb-1.5 flex items-center gap-1.5">
+              <Sparkles className="w-3.5 h-3.5" />
+              <span>Claim Custom Playlist</span>
+            </h2>
+            <p className="text-[11px] text-slate-400 leading-relaxed font-sans">
+              Enter your real Telegram Handler name to automatically compile your unique, dedicated IPTV playlist with active anti-sharing protection.
+            </p>
+          </div>
+
+          <form onSubmit={handleTelegramLogin} className="flex flex-col gap-4 text-left">
+            <div className="flex flex-col gap-2">
+              <label className="text-xs text-slate-300 font-semibold">Your Telegram Username</label>
+              <input 
+                type="text" 
+                required
+                value={telegramLoginUsername}
+                onChange={(e) => setTelegramLoginUsername(e.target.value)}
+                placeholder="e.g. @cartel187"
+                className="w-full bg-[#08090f] border border-slate-900 hover:border-slate-800 focus:border-purple-600 outline-none text-slate-100 rounded-xl px-4 py-3.5 text-sm font-semibold transition-all font-mono"
+              />
+            </div>
+
+            {telegramLoginError && (
+              <p className="text-xs text-red-00 font-semibold mb-2">{telegramLoginError}</p>
+            )}
+
+            <button
+              type="submit"
+              disabled={loggingInTelegram}
+              className="cursor-pointer w-full mt-2 py-3.5 px-4 rounded-xl text-xs font-bold bg-gradient-to-r from-purple-700 to-indigo-700 hover:from-purple-600 hover:to-indigo-600 disabled:opacity-50 text-white transition-all shadow-lg shadow-purple-900/10 flex items-center justify-center gap-2"
+            >
+              <Send className="w-4 h-4" />
+              <span>{loggingInTelegram ? "Verifying Credentials..." : "Authenticate & Generate URL"}</span>
+            </button>
+          </form>
+
+          <button 
+            type="button"
+            onClick={handleLogout}
+            className="cursor-pointer text-slate-500 hover:text-slate-300 text-[10px] font-bold uppercase tracking-wider mt-8 transition-colors"
+          >
+            Switch to Public Portal
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (authStatus.role === "user" && currentUser) {
+    const userM3uUrl = `${currentOrigin}/playlist/user.m3u?token=${currentUser.token}`;
+    const usedSlots = currentUser.activeIps ? currentUser.activeIps.length : 0;
+    const progressPercent = (usedSlots / 4) * 100;
+
+    return (
+      <div id="user_portal" className="min-h-screen bg-[#07090e] text-slate-100 font-sans relative overflow-hidden flex flex-col justify-between">
+        {/* Visual background atmospheric elements */}
+        <div className="absolute top-0 left-1/4 w-[500px] h-[500px] bg-purple-950/10 rounded-full blur-[140px] pointer-events-none"></div>
+        <div className="absolute bottom-10 right-1/4 w-[600px] h-[600px] bg-blue-950/10 rounded-full blur-[140px] pointer-events-none"></div>
+
+        {/* Client Top Header */}
+        <header className="border-b border-slate-900 px-6 py-4 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <img src="https://ik.imagekit.io/yjtx9nh9y/Black%20White%20Minimal%20Simple%20Modern%20Pixel%20Neon%20%20Modern%20AI%20Logo.png?updatedAt=1780156943081" alt="Logo" className="w-8 h-8 object-cover ring-1 ring-purple-500/20 rounded-xl" />
+            <div>
+              <h1 className="text-sm font-bold tracking-tight text-white">ＣΛＲＴΞＬ  ＬＩＶΞ</h1>
+              <p className="text-[9px] font-mono tracking-wider font-bold text-purple-400">CLIENT PORTAL</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] text-slate-400 font-mono font-medium">Logged in: <span className="text-purple-400 font-bold">{currentUser.telegramUsername}</span></span>
+            <button 
+              onClick={handleLogout}
+              className="cursor-pointer bg-slate-950 hover:bg-red-950/40 text-slate-400 hover:text-red-400 border border-slate-900 hover:border-red-500/10 px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase transition-all"
+            >
+              Logout
+            </button>
+          </div>
+        </header>
+
+        {/* Client Hub Main Container */}
+        <main className="max-w-4xl w-full mx-auto px-4 py-8 flex-grow flex flex-col gap-6 relative z-10 justify-center">
+          {/* Welcome Dashboard Block */}
+          <div className="bg-[#0b0d18] border border-slate-900/80 rounded-3xl p-6 md:p-8 flex flex-col md:flex-row justify-between gap-6 relative text-left">
+            <div className="flex-1">
+              <span className="text-[10px] font-bold tracking-widest text-purple-400 uppercase font-mono">My Active Subscription</span>
+              <h2 className="text-2xl font-bold tracking-tight text-white mt-1">Claimed M3U Live Stream URL</h2>
+              <p className="text-xs text-slate-400 mt-2 leading-relaxed font-sans">
+                Copy this URL and paste it into any professional IPTV app. Your private playlist automatically routes under our security cloaker to guard your active connection. Do not share this URL with anyone!
+              </p>
+              
+              {/* Massive URL Copy block */}
+              <div className="mt-5 flex items-center gap-2 bg-slate-950 border border-slate-900 rounded-2xl p-2.5">
+                <input 
+                  type="text" 
+                  readOnly 
+                  value={userM3uUrl}
+                  className="flex-grow select-all bg-transparent outline-none font-mono text-xs font-semibold text-purple-300 px-3"
+                />
+                <button
+                  type="button"
+                  onClick={() => copyToClipboard(userM3uUrl)}
+                  className="cursor-pointer flex items-center gap-2 bg-[#121525] hover:bg-purple-600 text-white px-4 py-2.5 rounded-xl text-xs font-semibold transition-all shadow-md active:scale-95 text-center"
+                >
+                  {copiedUrl ? (
+                    <>
+                      <Check className="w-3.5 h-3.5" />
+                      <span>Copied!</span>
+                    </>
+                  ) : (
+                    <>
+                      <Copy className="w-3.5 h-3.5" />
+                      <span>Copy link</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+
+            {/* Devices usage dial card */}
+            <div className="md:w-64 bg-[#08090f] border border-slate-900 rounded-2xl p-5 flex flex-col justify-between w-full text-left">
+              <div>
+                <h3 className="text-xs font-bold text-slate-200 uppercase tracking-widest mb-1 font-sans">Device Pinning Status</h3>
+                <p className="text-[10px] text-slate-400 leading-relaxed font-sans">Allows playlist loads from up to 4 different IP connection addresses.</p>
+              </div>
+
+              {/* Meter */}
+              <div className="my-4">
+                <div className="h-2 bg-slate-950 rounded-full overflow-hidden border border-slate-900/10">
+                  <div 
+                    className="h-full bg-gradient-to-r from-purple-500 to-indigo-500 transition-all duration-500" 
+                    style={{ width: `${progressPercent}%` }}
+                  ></div>
+                </div>
+                <div className="flex justify-between items-center mt-2 font-mono text-[10px] text-slate-500">
+                  <span>{usedSlots} Devices Connected</span>
+                  <span>4 Slots Total</span>
+                </div>
+              </div>
+
+              <div className="text-[10px] text-slate-400 bg-purple-950/5 border border-purple-950/20 rounded-xl p-2.5 font-medium leading-relaxed font-sans">
+                🔓 Slots automatically pin upon first connection to your players.
+              </div>
+            </div>
+          </div>
+
+          {/* Current Pinned Devices Table */}
+          <div className="bg-[#0b0d18] border border-slate-900/80 rounded-3xl p-6 text-left">
+            <div className="flex items-center gap-2 mb-4">
+              <ShieldCheck className="w-4.5 h-4.5 text-purple-400" />
+              <h3 className="text-sm font-semibold text-white tracking-wide uppercase">My Registered Hardware Connections</h3>
+            </div>
+
+            {usedSlots === 0 ? (
+              <div className="text-center py-6">
+                <div className="inline-flex p-3 bg-[#080a10] border border-slate-900 rounded-2xl text-slate-500 mb-3 animate-pulse">
+                  <Tv className="w-6 h-6" />
+                </div>
+                <p className="text-xs text-slate-300 font-medium font-sans">No Players Registered Yet</p>
+                <p className="text-[11px] text-slate-500 max-w-sm mx-auto mt-1 leading-relaxed font-sans">
+                  Open the copied playlist URL inside your IPTV TV or mobile client (like OTT Navigator or TiviMate) to instantly authorize your current device slot.
+                </p>
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left font-sans text-xs">
+                  <thead>
+                    <tr className="border-b border-slate-900 text-slate-500 font-mono text-[10px] font-bold uppercase tracking-wider">
+                      <th className="pb-3 pl-2">Device IP Address</th>
+                      <th className="pb-3">Location Geotag</th>
+                      <th className="pb-3">Connected M3U Client App</th>
+                      <th className="pb-3 text-right pr-2 font-mono">Last accessed</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {currentUser.activeIps.map((ip, i) => (
+                      <tr key={i} className="border-b border-slate-900/40 hover:bg-[#0d1020]/20 transition-colors">
+                        <td className="py-4 pl-2 font-semibold font-mono text-purple-300">{ip}</td>
+                        <td className="py-4 text-slate-300">
+                          {currentUser.lastLocation || "Active Connection"}
+                        </td>
+                        <td className="py-4 text-slate-400 font-mono text-[11px] max-w-[180px] truncate" title={currentUser.lastUserAgent}>
+                          {currentUser.lastUserAgent || "IPTV Downloader"}
+                        </td>
+                        <td className="py-4 text-right pr-2 font-mono text-[10px] text-slate-500">
+                          {currentUser.lastAccessedAt || "Just Now"}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+
+          {/* Quick Installation Tutorial */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-left">
+            <div className="bg-[#0b0d18]/60 border border-slate-900 p-5 rounded-2xl">
+              <h4 className="text-xs font-bold text-white uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                <Check className="w-4 h-4 text-emerald-400" />
+                <span>How to use on Samsung / LG / Firestick TV</span>
+              </h4>
+              <p className="text-[11px] text-slate-400 leading-relaxed font-sans">
+                Download a professional player like <b>TiviMate</b> or <b>Xtream / OTT Navigator</b>. Add a new playlist source, select <b>M3U URL</b>, paste your unique URL, and save. Enjoy bufferless stream performance!
+              </p>
+            </div>
+            
+            <div className="bg-[#0b0d18]/60 border border-slate-900 p-5 rounded-2xl">
+              <h4 className="text-xs font-bold text-white uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                <Check className="w-4 h-4 text-emerald-400" />
+                <span>Need a Device Reset?</span>
+              </h4>
+              <p className="text-[11px] text-slate-400 leading-relaxed font-sans font-medium">
+                Changed your home network, operator, or router? Contact our Telegram support team to clear your registered devices instantly:
+                <a href={config.telegramUrl} target="_blank" rel="noreferrer" className="text-purple-400 underline block mt-2 font-bold hover:text-purple-300">
+                  {config.telegramUrl}
+                </a>
+              </p>
+            </div>
+          </div>
+        </main>
+
+        <footer className="py-6 border-t border-slate-900/40 text-center text-[10px] text-slate-600 font-mono">
+          👑 CARTEL LIVE PLAYER PLATFORM PRO © {new Date().getFullYear()} — PRIVATE STABLE VERSION
+        </footer>
+      </div>
+    );
+  }
+
   return (
     <div id="iptv_app" className="min-h-screen bg-[#07090e] text-slate-100 font-sans relative overflow-hidden selection:bg-purple-900 selection:text-purple-100">
       
@@ -733,6 +1184,12 @@ Load your personalized URL in any player (TiviMate, Kodi, Apple TV, VLC):
             className={`cursor-pointer px-4 py-1.5 rounded-lg text-xs font-semibold tracking-wide transition-all ${activeTab === "simulator" ? "bg-gradient-to-r from-purple-900/80 to-indigo-900/80 text-white shadow-md shadow-black/40 border border-purple-500/10" : "text-slate-400 hover:text-white"}`}
           >
             Security Gate Simulator
+          </button>
+          <button 
+            onClick={() => { setActiveTab("user_manager"); fetchUserTokens(); }}
+            className={`cursor-pointer px-4 py-1.5 rounded-lg text-xs font-semibold tracking-wide transition-all ${activeTab === "user_manager" ? "bg-gradient-to-r from-purple-900/80 to-indigo-900/80 text-white shadow-md shadow-black/40 border border-purple-500/10" : "text-slate-400 hover:text-white"}`}
+          >
+            Manage Users ({userTokens.length})
           </button>
         </nav>
         
@@ -818,6 +1275,12 @@ Load your personalized URL in any player (TiviMate, Kodi, Apple TV, VLC):
             className={`cursor-pointer flex-1 py-1 px-1 rounded-lg text-[10px] font-semibold tracking-wide transition-all ${activeTab === "simulator" ? "bg-gradient-to-r from-purple-900 to-indigo-900 text-white" : "text-slate-400"}`}
           >
             Simulator
+          </button>
+          <button 
+            onClick={() => { setActiveTab("user_manager"); fetchUserTokens(); }}
+            className={`cursor-pointer flex-1 py-1 px-1 rounded-lg text-[10px] font-semibold tracking-wide transition-all ${activeTab === "user_manager" ? "bg-gradient-to-r from-purple-900 to-indigo-900 text-white" : "text-slate-400"}`}
+          >
+            Users
           </button>
         </div>
 
@@ -932,6 +1395,43 @@ Load your personalized URL in any player (TiviMate, Kodi, Apple TV, VLC):
                       </div>
                     </div>
 
+                  </div>
+
+                  {/* Telegram Bot Logging config */}
+                  <div className="border-t border-slate-900 pt-5 mt-3 flex flex-col gap-4">
+                    <div className="flex items-center gap-2">
+                      <Send className="w-4 h-4 text-purple-400" />
+                      <h4 className="text-xs font-bold text-white uppercase tracking-wider">Telegram Logging & Bot Telemetry</h4>
+                    </div>
+                    
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      {/* Bot Token input */}
+                      <div className="flex flex-col gap-2">
+                        <label className="text-xs text-slate-300 font-medium">Telegram Bot Token</label>
+                        <input 
+                          type="password" 
+                          value={telegramBotTokenInput} 
+                          onChange={(e) => setTelegramBotTokenInput(e.target.value)}
+                          placeholder="e.g. 123456789:ABCDefG..."
+                          className="w-full bg-[#08090f] border border-slate-900 hover:border-slate-800 focus:border-purple-600 outline-none text-slate-100 rounded-xl px-4 py-3 text-xs font-mono transition-all"
+                        />
+                      </div>
+
+                      {/* Chat ID Input */}
+                      <div className="flex flex-col gap-2">
+                        <label className="text-xs text-slate-300 font-medium">Telegram Chat ID / Group ID</label>
+                        <input 
+                          type="text" 
+                          value={telegramChatIdInput} 
+                          onChange={(e) => setTelegramChatIdInput(e.target.value)}
+                          placeholder="e.g. -100123456789"
+                          className="w-full bg-[#08090f] border border-slate-900 hover:border-slate-800 focus:border-purple-600 outline-none text-slate-100 rounded-xl px-4 py-3 text-xs font-mono transition-all"
+                        />
+                      </div>
+                    </div>
+                    <p className="text-[10px] text-slate-400 leading-relaxed font-sans">
+                      Used to notify your private group/channel instantly when a new Telegram Username claims a token, connects a player, or registers a device limit block. Create a bot using <a href="https://t.me/BotFather" target="_blank" rel="noreferrer" className="text-purple-400 font-bold hover:underline font-mono">@BotFather</a> and add it as an administrator of your logging channel.
+                    </p>
                   </div>
 
                   {/* Submit Button */}
@@ -1751,6 +2251,123 @@ Load your personalized URL in any player (TiviMate, Kodi, Apple TV, VLC):
               </div>
             </div>
 
+          </div>
+        )}
+
+        {/* Manage User Tokens Tab */}
+        {activeTab === "user_manager" && (
+          <div id="user_manager_panel" className="bg-[#0b0d18] border border-slate-900 rounded-2xl p-6 flex flex-col gap-6 text-left">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-900/60 pb-5">
+              <div>
+                <h3 className="text-lg font-bold text-white tracking-tight flex items-center gap-2">
+                  <Users className="w-5 h-5 text-purple-400" />
+                  <span>Licensed Telegram Client Management</span>
+                </h3>
+                <p className="text-xs text-slate-400 mt-1 font-sans">
+                  Monitor customized subscriber playlists with hardware device pinning (maximum 4 connections per card).
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={fetchUserTokens}
+                disabled={loadingUserTokens}
+                className="cursor-pointer bg-[#0f121d] hover:bg-purple-600/20 text-purple-400 font-bold hover:text-purple-300 text-xs py-2 px-3.5 rounded-xl border border-purple-500/10 transition-all flex items-center gap-1.5 uppercase font-mono shrink-0"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${loadingUserTokens ? "animate-spin" : ""}`} />
+                <span>Reload Accounts</span>
+              </button>
+            </div>
+
+            {loadingUserTokens ? (
+              <div className="py-12 bg-slate-950/20 border border-slate-900 rounded-2xl text-center text-slate-500 flex flex-col items-center justify-center gap-2">
+                <RefreshCw className="w-6 h-6 animate-spin text-purple-500" />
+                <span className="text-xs font-sans">Connecting securely to user database...</span>
+              </div>
+            ) : userTokens.length === 0 ? (
+              <div className="py-12 bg-[#05060b]/40 border border-slate-950 rounded-2xl text-center text-slate-500 flex flex-col items-center justify-center gap-3">
+                <Users className="w-8 h-8 text-slate-700 animate-pulse" />
+                <span className="text-xs font-semibold text-slate-400 font-sans">No Subscribers Configured Yet</span>
+                <p className="text-[11px] text-slate-600 max-w-sm leading-relaxed mx-auto font-sans">
+                  Client users can claim customized subscription cards by visiting your portal using the bypass token parameter <code className="text-purple-400 font-mono font-bold">?token=carteltoken</code> inside their Safari/Chrome browser.
+                </p>
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left font-sans text-xs">
+                  <thead>
+                    <tr className="border-b border-slate-900 text-slate-500 font-mono text-[10px] font-bold uppercase tracking-wider">
+                      <th className="pb-3 pl-2">Telegram Account</th>
+                      <th className="pb-3">Subscribed Token</th>
+                      <th className="pb-3">Device Slots (Max 4)</th>
+                      <th className="pb-3">Location Geotag</th>
+                      <th className="pb-3">M3U Client App</th>
+                      <th className="pb-3">Created</th>
+                      <th className="pb-3 text-right pr-2">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {userTokens.map((token, i) => {
+                      const clientUrl = `${currentOrigin}/playlist/user.m3u?token=${token.token}`;
+                      const activeDevices = token.activeIps ? token.activeIps.length : 0;
+                      return (
+                        <tr key={i} className="border-b border-slate-900/40 hover:bg-[#0d1020]/20 transition-colors">
+                          <td className="py-4 pl-2">
+                            <div className="flex items-center gap-1.5 font-bold text-white">
+                              <span className="text-purple-400 font-mono">@</span>
+                              <span>{token.telegramUsername.replace("@", "")}</span>
+                            </div>
+                          </td>
+                          <td className="py-4 font-mono font-semibold text-purple-300">
+                            <span className="cursor-pointer select-all" title="Click to copy full playlist URL" onClick={() => copyToClipboard(clientUrl)}>
+                              {token.token}
+                            </span>
+                          </td>
+                          <td className="py-4">
+                            <div className="flex items-center gap-1.5">
+                              <span className={`h-2 w-2 rounded-full ${activeDevices === 4 ? "bg-rose-500" : activeDevices > 0 ? "bg-emerald-500 animate-pulse" : "bg-slate-700"}`}></span>
+                              <span className="font-mono text-slate-200 font-semibold">{activeDevices} / 4 Slots Used</span>
+                            </div>
+                          </td>
+                          <td className="py-4 text-slate-300 font-medium">
+                            {token.lastLocation || <span className="text-slate-600 font-mono text-[10px]">No telemetry yet</span>}
+                          </td>
+                          <td className="py-4 text-slate-400 font-mono text-[10px] max-w-[140px] truncate" title={token.lastUserAgent || "N/A"}>
+                            {token.lastUserAgent || "N/A"}
+                          </td>
+                          <td className="py-4 text-slate-400 font-sans">
+                            {token.createdAt ? new Date(token.createdAt).toLocaleDateString() : "Historical"}
+                          </td>
+                          <td className="py-4 text-right pr-2 flex items-center justify-end gap-2">
+                            <button
+                              type="button"
+                              onClick={() => copyToClipboard(clientUrl)}
+                              className="cursor-pointer bg-slate-900 hover:bg-slate-800 text-slate-300 px-2.5 py-1.5 rounded-lg border border-slate-800 transition-all text-[11px] font-bold uppercase"
+                            >
+                              Copy Link
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => resetUserTokenIps(token.token)}
+                              className="cursor-pointer bg-purple-950/40 hover:bg-purple-900/40 text-purple-400 hover:text-purple-300 px-2.5 py-1.5 rounded-lg border border-purple-500/10 transition-all text-[11px] font-bold uppercase"
+                            >
+                              Reset IPs
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => deleteUserToken(token.token)}
+                              className="cursor-pointer bg-rose-950/30 hover:bg-rose-900/40 text-rose-400 hover:text-rose-300 px-2.5 py-1.5 rounded-lg border border-rose-500/10 transition-all text-[11px] font-bold uppercase"
+                            >
+                              Revoke
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
         )}
 
