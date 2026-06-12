@@ -2483,225 +2483,19 @@ router.post("/auth/logout", (req, res) => {
 });
 
 // Telegram username validation and secure custom token claims
-router.post("/auth/telegram-login", express.json(), async (req, res) => {
-  let { username } = req.body;
-  if (!username) {
-    return res.status(400).json({ success: false, error: "Telegram Username is required" });
-  }
-
-  // Sanitize
-  username = username.trim();
-  if (!username.startsWith("@")) {
-    username = "@" + username;
-  }
-
-  const tokens = loadUserTokens();
-  let userToken = tokens.find(t => t.telegramUsername.toLowerCase() === username.toLowerCase());
-
-  if (!userToken) {
-    const part = username.replace("@", "").toLowerCase().replace(/[^a-z0-9]/g, "");
-    const randomHex = crypto.randomBytes(3).toString("hex");
-    const generatedToken = `cartel-${part || "user"}-${randomHex}`;
-
-    userToken = {
-      telegramUsername: username,
-      token: generatedToken,
-      createdAt: new Date().toLocaleString("en-US", { hour12: true }) + " " + new Date().toLocaleDateString("en-US"),
-      activeIps: [],
-      maxDevices: 4
-    };
-
-    tokens.push(userToken);
-    saveUserTokens(tokens);
-  }
-
-  // Get requester info
-  const clientIp = getClientIp(req);
-  const userAgent = req.headers["user-agent"] || "Unknown Browser";
-  const geo = await getIpLocation(clientIp);
-  const locationStr = `${geo.city || "Unknown City"}, ${geo.region || "Unknown Region"}, ${geo.country || "Unknown Country"} (${geo.isp || "Unknown ISP"})`;
-
-  // Send interactive Telegram confirmation alert
-  const alertText = `🔑 <b>Portal Login Authenticated</b>\n\n` +
-                    `👤 <b>Telegram User:</b> <code>${username}</code>\n` +
-                    `🎫 <b>Secure Token:</b> <code>${userToken.token}</code>\n` +
-                    `🌐 <b>Client IP:</b> <code>${clientIp}</code>\n` +
-                    `📍 <b>Location:</b> ${locationStr}\n` +
-                    `📺 <b>Device App:</b> <code>${userAgent}</code>\n` +
-                    `⚙️ <b>Origin:</b> Telegram Client Generator Custom Portal`;
-  await sendTelegramAlert(alertText);
-
-  res.json({
-    success: true,
-    user: userToken
-  });
-});
+// [REMOVED]
 
 // Admin User Tokens Dashboard retrieval
-router.get("/admin/user-tokens", (req, res) => {
-  const token = getAuthTokenFromRequest(req);
-  if (token !== "cartelflag") {
-    return res.status(403).json({ success: false, error: "Unauthorized Admin access" });
-  }
-  const tokens = loadUserTokens();
-  res.json({ success: true, tokens });
-});
+// [REMOVED]
 
 // Admin delete/revoke a user token
-router.post("/admin/user-tokens/delete", express.json(), (req, res) => {
-  const token = getAuthTokenFromRequest(req);
-  if (token !== "cartelflag") {
-    return res.status(403).json({ success: false, error: "Unauthorized Admin access" });
-  }
-
-  const { targetToken } = req.body;
-  let tokens = loadUserTokens();
-  const originalLength = tokens.length;
-  tokens = tokens.filter(t => t.token !== targetToken);
-
-  if (tokens.length === originalLength) {
-    return res.status(404).json({ success: false, error: "Target token not found" });
-  }
-
-  saveUserTokens(tokens);
-  res.json({ success: true, message: "Token successfully revoked!" });
-});
+// [REMOVED]
 
 // Admin reset active device IPs for a user token
-router.post("/admin/user-tokens/reset-ips", express.json(), (req, res) => {
-  const token = getAuthTokenFromRequest(req);
-  if (token !== "cartelflag") {
-    return res.status(403).json({ success: false, error: "Unauthorized Admin access" });
-  }
-
-  const { targetToken } = req.body;
-  const tokens = loadUserTokens();
-  const user = tokens.find(t => t.token === targetToken);
-
-  if (!user) {
-    return res.status(404).json({ success: false, error: "Target token not found" });
-  }
-
-  user.activeIps = [];
-  saveUserTokens(tokens);
-  res.json({ success: true, message: "Device locks successfully cleared!" });
-});
+// [REMOVED]
 
 // Custom generated user playlist engine (M3U proxy)
-const userPlaylistHandler = async (req: express.Request, res: express.Response): Promise<any> => {
-  const token = (req.query.token as string || req.query.auth as string || "");
-  if (!token) {
-    return res.status(401).send("#EXTM3U\n# Error: Missing Token Query Parameter");
-  }
-
-  const tokens = loadUserTokens();
-  const user = tokens.find(t => t.token === token);
-  if (!user) {
-    return res.status(401).send("#EXTM3U\n# Error: Invalid or Revoked Client Token");
-  }
-
-  const clientIp = getClientIp(req);
-  const userAgent = req.headers["user-agent"] || "Obscure Player";
-
-  // Device Guard Sub-system: strict max 4 devices (IPs) 
-  let isNewIp = false;
-  if (!user.activeIps.includes(clientIp)) {
-    if (user.activeIps.length >= (user.maxDevices || 4)) {
-      // Exceeded devices, trigger Telegram threat-intelligence log
-      const warnMsg = `🔴 <b>SECURITY VIOLATION: Device Limit Exceeded!</b>\n\n` +
-                      `👤 <b>Violator User:</b> <code>${user.telegramUsername}</code>\n` +
-                      `🎫 <b>Client Token:</b> <code>${token}</code>\n` +
-                      `🌐 <b>Intruder IP:</b> <code>${clientIp}</code>\n` +
-                      `📺 <b>Player App:</b> <code>${userAgent}</code>\n` +
-                      `⚠️ <i>Blocked because client has already pinned 4 hardware IPs: ${user.activeIps.join(", ")}</i>`;
-      await sendTelegramAlert(warnMsg);
-
-      res.setHeader("Content-Type", "application/x-mpegurl; charset=utf-8");
-      return res.status(403).send(
-        `#EXTM3U\n` +
-        `#EXTINF:-1 tvg-id="0" tvg-name="ALERT" tvg-logo="https://ik.imagekit.io/yjtx9nh9y/Black%20White%20Minimal%20Simple%20Modern%20Pixel%20Neon%20%20Modern%20AI%20Logo.png",DEVICE LIMIT REACHED (MAX 4 DEVICES)\n` +
-        `https://cartelintro.vercel.app/cartelintro.m3u8\n` +
-        `#EXTINF:-1 tvg-id="0" tvg-name="SUPPORT" tvg-logo="https://ik.imagekit.io/yjtx9nh9y/sllmnhx-telegram-6896827.svg",Contact Support to Reset Connection\n` +
-        `${config.telegramUrl}\n`
-      );
-    }
-    user.activeIps.push(clientIp);
-    isNewIp = true;
-  }
-
-  // Update stats
-  user.lastAccessedAt = new Date().toLocaleString("en-US", { hour12: true }) + " " + new Date().toLocaleDateString("en-US");
-  user.lastUserAgent = userAgent;
-
-  const geo = await getIpLocation(clientIp);
-  const locationStr = `${geo.city || "Unknown City"}, ${geo.region || "Unknown Region"}, ${geo.country || "Unknown Country"} (${geo.isp || "Unknown ISP"})`;
-  user.lastLocation = locationStr;
-
-  saveUserTokens(tokens);
-
-  // Send real-time Telegram telemetry alert on fresh device registration
-  if (isNewIp) {
-    const registerMsg = `🟢 <b>New Device Registered (${user.activeIps.length}/4)</b>\n\n` +
-                        `👤 <b>User:</b> <code>${user.telegramUsername}</code>\n` +
-                        `🎫 <b>Client Token:</b> <code>${token}</code>\n` +
-                        `🌐 <b>Device IP:</b> <code>${clientIp}</code>\n` +
-                        `📍 <b>Location:</b> ${locationStr}\n` +
-                        `📺 <b>M3U Player App:</b> <code>${userAgent}</code>`;
-    await sendTelegramAlert(registerMsg);
-  }
-
-  try {
-    const upstreamUrl = "https://cartellive.vercel.app/api?token=cartels2&format=universal";
-    const response = await fetch(upstreamUrl, {
-      headers: {
-        "User-Agent": userAgent
-      }
-    });
-
-    if (!response.ok) {
-      throw new Error(`Upstream returned status ${response.status}`);
-    }
-
-    let playlistText = await response.text();
-
-    const rHost = req.headers.host || "localhost:3000";
-    let protocol = "http";
-    if (rHost.includes("run.app") || rHost.includes("vercel.app") || req.secure) {
-      protocol = "https";
-    }
-    const host = `${protocol}://${rHost}`;
-
-    // Wrap upstream stream paths to enforce device pinning during playback redirect 
-    playlistText = playlistText
-      .split("\n")
-      .map((line) => {
-        let tLine = line.trim();
-        if (tLine.startsWith("http") && !tLine.includes("cartel187") && !tLine.includes("xobypass=true") && !tLine.includes(host)) {
-          let baseUrl = tLine;
-          let modifiers = "";
-          if (tLine.includes("|")) {
-            const parts = tLine.split("|");
-            baseUrl = parts[0];
-            modifiers = "|" + parts.slice(1).join("|");
-          }
-          return `${host}/play?url=${encodeURIComponent(baseUrl)}&userToken=${token}${modifiers}`;
-        }
-        return line;
-      })
-      .join("\n");
-
-    res.setHeader("Content-Type", "application/x-mpegurl; charset=utf-8");
-    res.setHeader("Content-Disposition", `inline; filename="cartel-${user.telegramUsername.replace("@", "")}.m3u"`);
-    res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
-    res.status(200).send(playlistText);
-  } catch (err: any) {
-    console.error("[UserPlaylist] Upstream failure:", err);
-    res.status(500).send(`#EXTM3U\n# Error fetching upstream playlist: ${err.message || err}`);
-  }
-};
-
-// Route custom playlists inside API
-router.get("/user-playlist", userPlaylistHandler);
+// [REMOVED]
 
 // Setup serverless routing wrapper for Express
 const app = express();
@@ -2725,10 +2519,6 @@ app.use((req, res, next) => {
 
 // Mount /play on root app level
 app.get("/play", playHandler);
-
-// Mount user playlist aliases on root app level
-app.get("/playlist/user.m3u", userPlaylistHandler);
-app.get("/user-playlist.m3u", userPlaylistHandler);
 
 // Mount the router under /api
 app.use("/api", router);
