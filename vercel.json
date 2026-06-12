@@ -7,12 +7,7 @@
         {
           "type": "query",
           "key": "token",
-          "value": "cartelflag|carteltoken"
-        },
-        {
-          "type": "cookie",
-          "key": "auth_token",
-          "value": "cartelflag|carteltoken"
+          "value": "cartelflag"
         }
       ],
       "permanent": false,
