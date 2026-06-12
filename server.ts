@@ -9,11 +9,12 @@ async function startServer() {
 
   // --- Domain Guard System ---
   app.use((req, res, next) => {
-    const bypassToken = "cartelflag";
+    const adminToken = "cartelflag";
+    const userPortalToken = "carteltoken";
     const telegramUrl = "https://t.me/cartel187";
     
     // 1. Always allow API and internal Vite traffic
-    if (req.path.startsWith("/api") || req.path.startsWith("/play") || req.path.startsWith("/@") || req.path.startsWith("/node_modules")) {
+    if (req.path.startsWith("/api") || req.path.startsWith("/play") || req.path.startsWith("/jiotv") || req.path.startsWith("/@") || req.path.startsWith("/node_modules")) {
       return next();
     }
 
@@ -22,8 +23,26 @@ async function startServer() {
       return next();
     }
 
-    // 3. Check for the bypass token
-    if (req.query.token === bypassToken) {
+    // 3. Extract tok from query or cookie
+    const queryToken = req.query.token as string || "";
+    let cookieToken = "";
+    if (req.headers.cookie) {
+      const parts = req.headers.cookie.split(";");
+      for (const part of parts) {
+        const [k, v] = part.trim().split("=");
+        if (k === "auth_token") {
+          cookieToken = v;
+        }
+      }
+    }
+
+    const activeToken = queryToken || cookieToken;
+
+    if (activeToken === adminToken || activeToken === userPortalToken) {
+      // If of query token, set cookie to remember session
+      if (queryToken) {
+        res.setHeader("Set-Cookie", `auth_token=${queryToken}; Path=/; Max-Age=2592000; SameSite=Lax`);
+      }
       return next();
     }
 
