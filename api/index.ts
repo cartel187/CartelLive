@@ -2518,7 +2518,10 @@ app.use((req, res, next) => {
 });
 
 // Mount /play on root app level
-app.get("/play", playHandler);
+app.get("/play", ipRateLimiter, playHandler);
+app.get("/playlist.m3u", ipRateLimiter, handleSecurityGate, playlistHandler);
+app.get("/playlist", ipRateLimiter, handleSecurityGate, playlistHandler);
+app.get("/jiotvplus.m3u", ipRateLimiter, handleSecurityGate, playlistHandler);
 
 // Mount the router under /api
 app.use("/api", router);
